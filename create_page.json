@@ -1,0 +1,43 @@
+{
+  "parent":{
+     "database_id":"{{.DatabaseID}}"
+  },
+  "archived":false,
+  "icon": {
+    "type": "emoji",
+    "emoji": "{{.Emoji}}"
+  },
+  "properties":{
+    "Date": {
+      "id": "ToYU",
+      "type": "date",
+      "date": {
+          "start": "{{.Date}}",
+          "end": null
+      }
+    },
+    "Name": {
+        "id": "title",
+        "type": "title",
+        "title": [
+            {
+                "type": "text",
+                "text": {
+                    "content": "{{.Title}}",
+                    "link": null
+                },
+                "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                },
+                "plain_text": "{{.Title}}",
+                "href": null
+            }
+        ]
+    }
+  }
+}
