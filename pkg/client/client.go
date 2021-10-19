@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/GustavoCaso/notion_workflows/pkg/types"
 )
+
+const notionAPIURL = "https://api.notion.com/v1"
 
 type NotionClient struct {
 	httpClient http.Client
@@ -28,7 +31,7 @@ func NewHTTPClient(token string) NotionClient {
 }
 
 func (c NotionClient) CreatePage(postBody io.Reader) types.PageResponse {
-	request, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", postBody)
+	request, err := http.NewRequest("POST", fmt.Sprintf("%s/pages", notionAPIURL), postBody)
 
 	if err != nil {
 		panic(err)
@@ -40,6 +43,15 @@ func (c NotionClient) CreatePage(postBody io.Reader) types.PageResponse {
 		panic(err)
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(response.Body)
+
+		requestBodyReader, _ := request.GetBody()
+
+		requestBody, _ := ioutil.ReadAll(requestBodyReader)
+		panic(errors.New(fmt.Sprintf("Failed to create page. Error %s. PostBody sent %s", body, requestBody)))
+	}
 
 	body, _ := ioutil.ReadAll(response.Body)
 
