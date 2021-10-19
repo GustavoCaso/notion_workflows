@@ -12,20 +12,18 @@ import (
 )
 
 const (
-	notionAPIURL         = "https://api.notion.com/v1"
-	dailyCheckDatabaseID = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
-	habitTrackerId       = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
-	alcoholTrackerId     = "ec908068-203c-4882-acaa-2b3032a861c7"
+	habitTrackerId   = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
+	alcoholTrackerId = "ec908068-203c-4882-acaa-2b3032a861c7"
 )
 
-type childPageInfo struct {
+type trackingPageInfo struct {
 	DatabaseID string
 	Emoji      string
 	Date       string
 	Title      string
 }
 
-type parentPageInfo struct {
+type dailyCheckPageInfo struct {
 	AlcoholTrackerPageID  string
 	DailyActivitiesPageID string
 	Date                  string
@@ -39,42 +37,42 @@ func main() {
 	date := currentTime.Format("2006-01-02")
 	title := fmt.Sprintf("%02d/%02d/%d", currentTime.Day(), currentTime.Month(), currentTime.Year())
 
-	alcoholPageInfo := childPageInfo{
+	alcoholPageInfo := trackingPageInfo{
 		DatabaseID: alcoholTrackerId,
 		Emoji:      "🍺",
 		Date:       date,
 		Title:      title,
 	}
 
-	habitPageInfo := childPageInfo{
+	habitPageInfo := trackingPageInfo{
 		DatabaseID: habitTrackerId,
 		Emoji:      "👟",
 		Date:       date,
 		Title:      title,
 	}
 
-	alcoholTrackerPageID := createEmptyPage(client, alcoholPageInfo)
-	habitTrackerPageID := createEmptyPage(client, habitPageInfo)
+	alcoholTrackerPageID := createTrackingPage(client, alcoholPageInfo)
+	habitTrackerPageID := createTrackingPage(client, habitPageInfo)
 
-	daylyCheckPageInfo := parentPageInfo{
+	daylyCheckPageInfo := dailyCheckPageInfo{
 		AlcoholTrackerPageID:  alcoholTrackerPageID,
 		DailyActivitiesPageID: habitTrackerPageID,
 		Date:                  date,
 		Title:                 title,
 	}
 
-	createPageWithContent(client, daylyCheckPageInfo)
+	createDailyCheckPage(client, daylyCheckPageInfo)
 	fmt.Println("Success")
 }
 
-func createEmptyPage(client client.NotionClient, pageInfo childPageInfo) string {
-	data, err := os.ReadFile("templates/create_page.json")
+func createTrackingPage(client client.NotionClient, pageInfo trackingPageInfo) string {
+	data, err := os.ReadFile("templates/tracking_page.json")
 	if err != nil {
 		panic(err)
 	}
 
 	var buf bytes.Buffer
-	t := template.Must(template.New("createPage").Parse(string(data)))
+	t := template.Must(template.New("createTrackingPage").Parse(string(data)))
 	t.Execute(&buf, pageInfo)
 
 	response := client.CreatePage(bytes.NewBuffer(buf.Bytes()))
@@ -82,14 +80,14 @@ func createEmptyPage(client client.NotionClient, pageInfo childPageInfo) string 
 	return response.ID
 }
 
-func createPageWithContent(client client.NotionClient, pageInfo parentPageInfo) string {
-	data, err := os.ReadFile("templates/create_page_with_content.json")
+func createDailyCheckPage(client client.NotionClient, pageInfo dailyCheckPageInfo) string {
+	data, err := os.ReadFile("templates/daily_check_page.json")
 	if err != nil {
 		panic(err)
 	}
 
 	var buf bytes.Buffer
-	t := template.Must(template.New("createPageWithContent").Parse(string(data)))
+	t := template.Must(template.New("createDailyCheckPage").Parse(string(data)))
 	t.Execute(&buf, pageInfo)
 
 	response := client.CreatePage(bytes.NewBuffer(buf.Bytes()))
