@@ -75,7 +75,15 @@ func createTrackingPage(client client.NotionClient, pageInfo trackingPageInfo) s
 	t := template.Must(template.New("createTrackingPage").Parse(string(data)))
 	t.Execute(&buf, pageInfo)
 
-	response := client.CreatePage(bytes.NewBuffer(buf.Bytes()))
+	filter := fmt.Sprintf(string(`{
+    "filter": {
+        "property": "Name",
+        "text": {
+            "equals": "%s"
+        }
+    }
+}`), pageInfo.Title)
+	response := client.FindOrCreatePage(pageInfo.DatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
 
 	return response.ID
 }
@@ -90,7 +98,16 @@ func createDailyCheckPage(client client.NotionClient, pageInfo dailyCheckPageInf
 	t := template.Must(template.New("createDailyCheckPage").Parse(string(data)))
 	t.Execute(&buf, pageInfo)
 
-	response := client.CreatePage(bytes.NewBuffer(buf.Bytes()))
+	filter := fmt.Sprintf(string(`{
+    "filter": {
+        "property": "Name",
+        "text": {
+            "equals": "%s"
+        }
+    }
+}`), pageInfo.Title)
+
+	response := client.FindOrCreatePage("3b27a5d9-138b-4f50-9c7b-7a77224f0579", bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
 
 	return response.ID
 }
