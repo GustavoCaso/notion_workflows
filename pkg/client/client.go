@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -30,6 +29,47 @@ func NewHTTPClient(token string) NotionClient {
 	}
 }
 
+func (c NotionClient) FindOrCreatePage(databaseId string, pageQuery, pageBody io.Reader) types.PageResponse {
+	fmt.Printf("Querying DB %s with Query %s\n", databaseId, pageQuery)
+	request, err := http.NewRequest("POST", fmt.Sprintf("%s/databases/%s/query", notionAPIURL, databaseId), pageQuery)
+
+	if err != nil {
+		panic(err)
+	}
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(response.Body)
+
+		requestBodyReader, _ := request.GetBody()
+
+		requestBody, _ := ioutil.ReadAll(requestBodyReader)
+		panic(fmt.Errorf("Failed to list pages. Error %s. QueryBody sent %s", body, requestBody))
+	}
+
+	body, _ := ioutil.ReadAll(response.Body)
+
+	var listPageResponse types.ListPageResponse
+	err = json.Unmarshal(body, &listPageResponse)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Querying DB Resulst%s\n", listPageResponse)
+
+	if len(listPageResponse.Results) == 1 {
+		return listPageResponse.Results[0]
+	}
+
+	return c.CreatePage(pageBody)
+}
+
 func (c NotionClient) CreatePage(postBody io.Reader) types.PageResponse {
 	request, err := http.NewRequest("POST", fmt.Sprintf("%s/pages", notionAPIURL), postBody)
 
@@ -50,7 +90,7 @@ func (c NotionClient) CreatePage(postBody io.Reader) types.PageResponse {
 		requestBodyReader, _ := request.GetBody()
 
 		requestBody, _ := ioutil.ReadAll(requestBodyReader)
-		panic(errors.New(fmt.Sprintf("Failed to create page. Error %s. PostBody sent %s", body, requestBody)))
+		panic(fmt.Errorf("Failed to create page. Error %s. PostBody sent %s", body, requestBody))
 	}
 
 	body, _ := ioutil.ReadAll(response.Body)
