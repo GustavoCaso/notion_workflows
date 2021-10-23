@@ -1,4 +1,4 @@
-name: morning_routine
+name: create_day_pages
 
 on:
   workflow_dispatch:
