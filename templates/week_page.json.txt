@@ -1,0 +1,59 @@
+{
+  "parent": {
+    "database_id": "8a9a5eb6-8d2c-49a5-a286-ececece9b2b5"
+  },
+  "properties": {
+    "Habit Tracker Configuration (Relation)": {
+        "id": "pI{b",
+        "type": "relation",
+        "relation": [
+            {
+                "id": "191aa568-5475-454c-af59-408be8f7c435"
+            }
+        ]
+    },
+    "Habit Tracket (Relation)": {
+        "id": "@fq|",
+        "type": "relation",
+        "relation": [
+        {{range $index, $id := .HabitTrackingPageIDs}}
+            {{if $index}},{{end}}
+            {
+                "id": "{{$id}}"
+            }
+        {{end}}
+        ]
+    },
+    "Dates": {
+        "id": "d|fk",
+        "type": "date",
+        "date": {
+            "start": "{{.StartDate}}",
+            "end": "{{.EndDate}}"
+        }
+    },
+    "Name": {
+        "id": "title",
+        "type": "title",
+        "title": [
+            {
+                "type": "text",
+                "text": {
+                    "content": "{{.Title}}",
+                    "link": null
+                },
+                "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                },
+                "plain_text": "{{.Title}}",
+                "href": null
+            }
+        ]
+    }
+  }
+}

@@ -6,5 +6,6 @@ type ListPageResponse struct {
 }
 
 type PageResponse struct {
-	ID string `json:"id"`
+	ID         string                            `json:"id"`
+	Properties map[string]map[string]interface{} `json:"properties"`
 }

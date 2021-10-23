@@ -1,0 +1,42 @@
+{
+  "parent": {
+    "database_id": "83ab95f9-d1d9-489e-b761-8dfbe839ba37"
+  },
+  "properties": {
+    "Weeks": {
+      "id": ";yNB",
+      "type": "relation",
+      "relation": [
+      {{range $index, $id := .WeekPageIDs}}
+          {{if $index}},{{end}}
+          {
+              "id": "{{$id}}"
+          }
+      {{end}}
+      ]
+    },
+    "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+          {
+              "type": "text",
+              "text": {
+                  "content": "{{.Title}}",
+                  "link": null
+              },
+              "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+              },
+              "plain_text": "{{.Title}}",
+              "href": null
+          }
+      ]
+    }
+  }
+}

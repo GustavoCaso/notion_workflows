@@ -63,11 +63,90 @@ func (c NotionClient) FindOrCreatePage(databaseId string, pageQuery, pageBody io
 
 	fmt.Printf("Querying DB Resulst%s\n", listPageResponse)
 
-	if len(listPageResponse.Results) == 1 {
+	resultsLength := len(listPageResponse.Results)
+
+	if resultsLength == 1 {
 		return listPageResponse.Results[0]
 	}
 
+	if resultsLength > 1 {
+		panic(fmt.Errorf("multiple pages returns from querying the database: %s", databaseId))
+	}
+
 	return c.CreatePage(pageBody)
+}
+
+func (c NotionClient) FindPages(databaseId string, pageQuery io.Reader) []types.PageResponse {
+	fmt.Printf("Querying DB %s with Query %s\n", databaseId, pageQuery)
+	request, err := http.NewRequest("POST", fmt.Sprintf("%s/databases/%s/query", notionAPIURL, databaseId), pageQuery)
+
+	if err != nil {
+		panic(err)
+	}
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(response.Body)
+
+		requestBodyReader, _ := request.GetBody()
+
+		requestBody, _ := ioutil.ReadAll(requestBodyReader)
+		panic(fmt.Errorf("Failed to list pages. Error %s. QueryBody sent %s", body, requestBody))
+	}
+
+	body, _ := ioutil.ReadAll(response.Body)
+
+	var listPageResponse types.ListPageResponse
+	err = json.Unmarshal(body, &listPageResponse)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if len(listPageResponse.Results) > 0 {
+		return listPageResponse.Results
+	}
+	return []types.PageResponse{}
+}
+
+func (c NotionClient) UpdatePage(pageID string, pageBody io.Reader) types.PageResponse {
+	fmt.Printf("Updating Page %s with Body %s\n", pageID, pageBody)
+	request, err := http.NewRequest("PATCH", fmt.Sprintf("%s/pages/%s", notionAPIURL, pageID), pageBody)
+
+	if err != nil {
+		panic(err)
+	}
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(response.Body)
+
+		requestBodyReader, _ := request.GetBody()
+
+		requestBody, _ := ioutil.ReadAll(requestBodyReader)
+		panic(fmt.Errorf("Failed to update page. Error %s. QueryBody sent %s", body, requestBody))
+	}
+
+	body, _ := ioutil.ReadAll(response.Body)
+
+	var pageResponse types.PageResponse
+	err = json.Unmarshal(body, &pageResponse)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return pageResponse
 }
 
 func (c NotionClient) CreatePage(postBody io.Reader) types.PageResponse {
