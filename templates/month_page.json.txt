@@ -15,6 +15,13 @@
       {{end}}
       ]
     },
+    "Dates": {
+        "type": "date",
+        "date": {
+            "start": "{{.StartDate}}",
+            "end": "{{.EndDate}}"
+        }
+    },
     "Name": {
       "id": "title",
       "type": "title",

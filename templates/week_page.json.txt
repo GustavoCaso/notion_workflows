@@ -25,7 +25,6 @@
         ]
     },
     "Dates": {
-        "id": "d|fk",
         "type": "date",
         "date": {
             "start": "{{.StartDate}}",

@@ -44,6 +44,8 @@ type weekPageInfo struct {
 
 type monthPageInfo struct {
 	Title       string
+	StartDate   string
+	EndDate     string
 	WeekPageIDs []string
 }
 
@@ -60,8 +62,10 @@ type week struct {
 }
 
 type monthData struct {
-	name  string
-	weeks map[int]*week
+	startDate string
+	endDate   string
+	name      string
+	weeks     map[int]*week
 }
 
 const DATE_FORMAT = "2006-01-02"
@@ -132,18 +136,28 @@ func main() {
 	}
 
 	month := monthData{
-		name:  fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentDay.Year()),
-		weeks: map[int]*week{},
+		startDate: firstOfMonth.Format(DATE_FORMAT),
+		endDate:   lastOfMonth.Format(DATE_FORMAT),
+		name:      fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentDay.Year()),
+		weeks:     map[int]*week{},
 	}
 
-	for currentDay != lastOfMonth {
+	filled := false
+
+	for !filled {
+		fmt.Println(currentDay)
 		_, weekNumber := currentDay.ISOWeek()
+		fmt.Println(weekNumber)
 
 		if month.weeks[weekNumber] == nil {
 			month.weeks[weekNumber] = &week{}
 		}
 
 		month.weeks[weekNumber].days = append(month.weeks[weekNumber].days, currentDay)
+
+		if currentDay.Equal(lastOfMonth) {
+			filled = true
+		}
 
 		currentDay = currentDay.AddDate(0, 0, 1)
 	}
@@ -217,6 +231,8 @@ func generateMonthsPages(client client.NotionClient, monthData monthData) {
 
 	monthPageInfo := monthPageInfo{
 		Title:       monthData.name,
+		StartDate:   monthData.startDate,
+		EndDate:     monthData.endDate,
 		WeekPageIDs: weekPageIDs,
 	}
 
