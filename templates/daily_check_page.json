@@ -8,15 +8,6 @@
      "emoji":"✏️"
   },
   "properties":{
-     "Alcohol Tracker (Related)":{
-        "id":"OLOm",
-        "type":"relation",
-        "relation":[
-           {
-              "id":"{{.AlcoholTrackerPageID}}"
-           }
-        ]
-     },
      "Daily Activities (Related)":{
       "type": "relation",
       "relation": [

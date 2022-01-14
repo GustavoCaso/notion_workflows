@@ -16,7 +16,6 @@ import (
 const (
 	dailyCheckDatabaseID     = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
 	habitTrackerDatabaseID   = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
-	alcoholTrackerDatabaseID = "ec908068-203c-4882-acaa-2b3032a861c7"
 	MonthTrackingDatabaseID  = "83ab95f9-d1d9-489e-b761-8dfbe839ba37"
 	WeekTrackingDatabaseID   = "8a9a5eb6-8d2c-49a5-a286-ececece9b2b5"
 )
@@ -29,7 +28,6 @@ type trackingPageInfo struct {
 }
 
 type dailyCheckPageInfo struct {
-	AlcoholTrackerPageID  string
 	DailyActivitiesPageID string
 	Date                  string
 	Title                 string
@@ -52,7 +50,6 @@ type monthPageInfo struct {
 type trackingPagesIDs struct {
 	dailyCheckPageIDs     []string
 	habitTrakerPageIDs    []string
-	alcoholTrackerPageIDs []string
 }
 
 type weekPageIDs []string
@@ -243,13 +240,6 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 	date := currentDay.Format(DATE_FORMAT)
 	title := fmt.Sprintf("%02d/%02d/%d", currentDay.Day(), currentDay.Month(), currentDay.Year())
 
-	alcoholPageInfo := trackingPageInfo{
-		DatabaseID: alcoholTrackerDatabaseID,
-		Emoji:      "🍺",
-		Date:       date,
-		Title:      title,
-	}
-
 	habitPageInfo := trackingPageInfo{
 		DatabaseID: habitTrackerDatabaseID,
 		Emoji:      "👟",
@@ -257,11 +247,9 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 		Title:      title,
 	}
 
-	alcoholTrackerPageID := createTrackingPage(client, alcoholPageInfo)
 	habitTrackerPageID := createTrackingPage(client, habitPageInfo)
 
 	daylyCheckPageInfo := dailyCheckPageInfo{
-		AlcoholTrackerPageID:  alcoholTrackerPageID,
 		DailyActivitiesPageID: habitTrackerPageID,
 		Date:                  date,
 		Title:                 title,
@@ -270,7 +258,6 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 	dailyCheckPageID := createDailyCheckPage(client, daylyCheckPageInfo)
 	fmt.Printf("Success creating daily check and tracking for %s\n", currentDay)
 	pageIds.dailyCheckPageIDs = append(pageIds.dailyCheckPageIDs, dailyCheckPageID)
-	pageIds.alcoholTrackerPageIDs = append(pageIds.alcoholTrackerPageIDs, alcoholTrackerPageID)
 	pageIds.habitTrakerPageIDs = append(pageIds.habitTrakerPageIDs, habitTrackerPageID)
 }
 
