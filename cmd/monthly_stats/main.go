@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	dailyCheckDatabaseID     = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
-	habitTrackerDatabaseID   = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
-	MonthTrackingDatabaseID  = "83ab95f9-d1d9-489e-b761-8dfbe839ba37"
-	WeekTrackingDatabaseID   = "8a9a5eb6-8d2c-49a5-a286-ececece9b2b5"
+	dailyCheckDatabaseID    = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
+	habitTrackerDatabaseID  = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
+	MonthTrackingDatabaseID = "83ab95f9-d1d9-489e-b761-8dfbe839ba37"
+	WeekTrackingDatabaseID  = "8a9a5eb6-8d2c-49a5-a286-ececece9b2b5"
 )
 
 type trackingPageInfo struct {
@@ -48,8 +48,8 @@ type monthPageInfo struct {
 }
 
 type trackingPagesIDs struct {
-	dailyCheckPageIDs     []string
-	habitTrakerPageIDs    []string
+	dailyCheckPageIDs  []string
+	habitTrakerPageIDs []string
 }
 
 type weekPageIDs []string
@@ -59,11 +59,11 @@ type week struct {
 }
 
 type monthData struct {
-	startDate string
-	endDate   string
-	name      string
-	currentYear      int
-	weeks     map[int]*week
+	startDate   string
+	endDate     string
+	name        string
+	currentYear int
+	weeks       map[int]*week
 }
 
 const DATE_FORMAT = "2006-01-02"
@@ -134,11 +134,11 @@ func main() {
 	}
 
 	month := monthData{
-		startDate: firstOfMonth.Format(DATE_FORMAT),
-		endDate:   lastOfMonth.Format(DATE_FORMAT),
-		name:      fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentDay.Year()),
+		startDate:   firstOfMonth.Format(DATE_FORMAT),
+		endDate:     lastOfMonth.Format(DATE_FORMAT),
+		name:        fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentDay.Year()),
 		currentYear: currentDay.Year(),
-		weeks:     map[int]*week{},
+		weeks:       map[int]*week{},
 	}
 
 	filled := false
