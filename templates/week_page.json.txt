@@ -12,7 +12,7 @@
             }
         ]
     },
-    "Habit Tracket (Relation)": {
+    "Habit Tracker (Relation)": {
         "id": "@fq|",
         "type": "relation",
         "relation": [

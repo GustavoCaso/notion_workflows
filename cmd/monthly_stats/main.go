@@ -270,7 +270,7 @@ func createWeekPage(client client.NotionClient, pageInfo weekPageInfo) string {
 	pageFound := len(findResponse) == 1
 
 	if pageFound {
-		habitTrackerRelation := findResponse[0].Properties["Habit Tracket (Relation)"]["relation"].([]interface{})
+		habitTrackerRelation := findResponse[0].Properties["Habit Tracker (Relation)"]["relation"].([]interface{})
 		for _, IDmap := range habitTrackerRelation {
 			IDmapCasted := IDmap.(map[string]interface{})
 			id := IDmapCasted["id"].(string)
