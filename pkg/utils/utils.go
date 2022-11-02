@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"text/template"
 )
 
 func GetAuthenticationToken() string {
@@ -20,4 +22,19 @@ func Contains(value string, values []string) bool {
 		}
 	}
 	return false
+}
+
+func ExecuteTemplate(fileName, templateName string, data any) (bytes.Buffer, error) {
+	var buf bytes.Buffer
+	fileBytes, err := os.ReadFile(fileName)
+	if err != nil {
+		return buf, err
+	}
+
+	t := template.Must(template.New(templateName).Parse(string(fileBytes)))
+	err = t.Execute(&buf, data)
+	if err != nil {
+		return buf, err
+	}
+	return buf, nil
 }

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"html/template"
-	"os"
 	"time"
 
 	"github.com/GustavoCaso/notion_workflows/pkg/client"
@@ -280,14 +278,10 @@ func createWeekPage(client client.NotionClient, pageInfo weekPageInfo) string {
 		}
 	}
 
-	data, err := os.ReadFile("templates/week_page.json.txt")
+	buf, err := utils.ExecuteTemplate("templates/week_page.json.txt", "createWeekPage", pageInfo)
 	if err != nil {
 		panic(err)
 	}
-
-	var buf bytes.Buffer
-	t := template.Must(template.New("createWeekPage").Parse(string(data)))
-	t.Execute(&buf, pageInfo)
 
 	var response types.PageResponse
 	if pageFound {
@@ -317,14 +311,10 @@ func createMonthPage(client client.NotionClient, pageInfo monthPageInfo) string 
 		}
 	}
 
-	data, err := os.ReadFile("templates/month_page.json.txt")
+	buf, err := utils.ExecuteTemplate("templates/month_page.json.txt", "createMonthPage", pageInfo)
 	if err != nil {
 		panic(err)
 	}
-
-	var buf bytes.Buffer
-	t := template.Must(template.New("createWeekPage").Parse(string(data)))
-	t.Execute(&buf, pageInfo)
 
 	var response types.PageResponse
 	if pageFound {
@@ -342,14 +332,10 @@ func createMonthPage(client client.NotionClient, pageInfo monthPageInfo) string 
 }
 
 func createTrackingPage(client client.NotionClient, pageInfo trackingPageInfo) string {
-	data, err := os.ReadFile("templates/tracking_page.json")
+	buf, err := utils.ExecuteTemplate("templates/tracking_page.json", "createTrackingPage", pageInfo)
 	if err != nil {
 		panic(err)
 	}
-
-	var buf bytes.Buffer
-	t := template.Must(template.New("createTrackingPage").Parse(string(data)))
-	t.Execute(&buf, pageInfo)
 
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
 	response := client.FindOrCreatePage(pageInfo.DatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
@@ -358,14 +344,10 @@ func createTrackingPage(client client.NotionClient, pageInfo trackingPageInfo) s
 }
 
 func createDailyCheckPage(client client.NotionClient, pageInfo dailyCheckPageInfo) string {
-	data, err := os.ReadFile("templates/daily_check_page.json")
+	buf, err := utils.ExecuteTemplate("templates/daily_check_page.json", "createDailyCheckPage", pageInfo)
 	if err != nil {
 		panic(err)
 	}
-
-	var buf bytes.Buffer
-	t := template.Must(template.New("createDailyCheckPage").Parse(string(data)))
-	t.Execute(&buf, pageInfo)
 
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
 	response := client.FindOrCreatePage(dailyCheckDatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
