@@ -266,7 +266,7 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 
 func createWeekPage(client client.NotionClient, pageInfo weekPageInfo) string {
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
-	findResponse := client.FindPages("8a9a5eb6-8d2c-49a5-a286-ececece9b2b5", bytes.NewBuffer([]byte(filter)))
+	findResponse := client.FindPages(WeekTrackingDatabaseID, bytes.NewBuffer([]byte(filter)))
 	pageFound := len(findResponse) == 1
 
 	if pageFound {
@@ -303,7 +303,7 @@ func createWeekPage(client client.NotionClient, pageInfo weekPageInfo) string {
 
 func createMonthPage(client client.NotionClient, pageInfo monthPageInfo) string {
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
-	findResponse := client.FindPages("83ab95f9-d1d9-489e-b761-8dfbe839ba37", bytes.NewBuffer([]byte(filter)))
+	findResponse := client.FindPages(MonthTrackingDatabaseID, bytes.NewBuffer([]byte(filter)))
 	pageFound := len(findResponse) == 1
 
 	if pageFound {
@@ -368,7 +368,7 @@ func createDailyCheckPage(client client.NotionClient, pageInfo dailyCheckPageInf
 	t.Execute(&buf, pageInfo)
 
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
-	response := client.FindOrCreatePage("3b27a5d9-138b-4f50-9c7b-7a77224f0579", bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
+	response := client.FindOrCreatePage(dailyCheckDatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
 
 	return response.ID
 }
