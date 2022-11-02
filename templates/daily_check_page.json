@@ -263,7 +263,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "Three amazing things that happened today...",
+                     "content": "Three amazing things happened today...",
                      "link": null
                   },
                   "annotations": {
@@ -274,7 +274,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "Three amazing things that happened today...",
+                  "plain_text": "Three amazing things happened today...",
                   "href": null
                }
             ]
