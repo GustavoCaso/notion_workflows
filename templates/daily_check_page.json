@@ -218,7 +218,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "I am grateful for it.",
+                     "content": "I am grateful for...",
                      "link": null
                   },
                   "annotations": {
@@ -229,7 +229,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "I am grateful for it.",
+                  "plain_text": "I am grateful for...",
                   "href": null
                }
             ]
