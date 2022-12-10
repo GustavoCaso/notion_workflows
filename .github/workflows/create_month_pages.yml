@@ -14,7 +14,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
-          go-version: "1.17.0"
+          go-version: "1.18.0"
       - name: Create monthly pages
         run: go run cmd/monthly/main.go
         env:
