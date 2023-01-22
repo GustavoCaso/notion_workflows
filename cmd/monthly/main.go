@@ -134,8 +134,8 @@ func main() {
 	month := monthData{
 		startDate:   firstOfMonth.Format(DATE_FORMAT),
 		endDate:     lastOfMonth.Format(DATE_FORMAT),
-		name:        fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentDay.Year()),
-		currentYear: currentDay.Year(),
+		name:        fmt.Sprintf("%s %d", firstOfMonth.Month().String(), currentYear),
+		currentYear: currentYear,
 		weeks:       map[int]*week{},
 	}
 
