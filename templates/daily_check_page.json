@@ -218,7 +218,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "I am grateful for...",
+                     "content": "I am grateful about:",
                      "link": null
                   },
                   "annotations": {
@@ -229,7 +229,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "I am grateful for...",
+                  "plain_text": "I am grateful about:",
                   "href": null
                }
             ]
@@ -263,7 +263,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "Three amazing things happened today...",
+                     "content": "Three amazing things happened today:",
                      "link": null
                   },
                   "annotations": {
@@ -274,7 +274,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "Three amazing things happened today...",
+                  "plain_text": "Three amazing things happened today:",
                   "href": null
                }
             ]
@@ -326,7 +326,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "How could I have made today even better?",
+                     "content": "Anything esle?",
                      "link": null
                   },
                   "annotations": {
@@ -337,7 +337,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "How could I have made today even better?",
+                  "plain_text": "Anything esle?",
                   "href": null
                }
             ]
