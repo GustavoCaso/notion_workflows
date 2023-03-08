@@ -326,7 +326,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "Anything esle?",
+                     "content": "Anything else?",
                      "link": null
                   },
                   "annotations": {
@@ -337,7 +337,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "Anything esle?",
+                  "plain_text": "Anything else?",
                   "href": null
                }
             ]
