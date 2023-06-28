@@ -8,14 +8,6 @@
       "emoji": "✏️"
    },
    "properties": {
-      "Daily Activities (Related)": {
-         "type": "relation",
-         "relation": [
-            {
-               "id": "{{.DailyActivitiesPageID}}"
-            }
-         ]
-      },
       "Date": {
          "id": "mb]K",
          "type": "date",

@@ -26,9 +26,8 @@ type trackingPageInfo struct {
 }
 
 type dailyCheckPageInfo struct {
-	DailyActivitiesPageID string
-	Date                  string
-	Title                 string
+	Date  string
+	Title string
 }
 
 type weekPageInfo struct {
@@ -46,7 +45,6 @@ type monthPageInfo struct {
 }
 
 type trackingPagesIDs struct {
-	dailyCheckPageIDs  []string
 	habitTrakerPageIDs []string
 }
 
@@ -251,14 +249,13 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 	habitTrackerPageID := createTrackingPage(client, habitPageInfo)
 
 	daylyCheckPageInfo := dailyCheckPageInfo{
-		DailyActivitiesPageID: habitTrackerPageID,
-		Date:                  date,
-		Title:                 title,
+		Date:  date,
+		Title: title,
 	}
 
-	dailyCheckPageID := createDailyCheckPage(client, daylyCheckPageInfo)
+	createDailyCheckPage(client, daylyCheckPageInfo)
 	fmt.Printf("Success creating daily check and tracking for %s\n", currentDay)
-	pageIds.dailyCheckPageIDs = append(pageIds.dailyCheckPageIDs, dailyCheckPageID)
+
 	pageIds.habitTrakerPageIDs = append(pageIds.habitTrakerPageIDs, habitTrackerPageID)
 }
 
