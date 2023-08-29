@@ -210,7 +210,7 @@
                {
                   "type": "text",
                   "text": {
-                     "content": "I am grateful about:",
+                     "content": "I am grateful for the following:",
                      "link": null
                   },
                   "annotations": {
@@ -221,7 +221,7 @@
                      "code": false,
                      "color": "default"
                   },
-                  "plain_text": "I am grateful about:",
+                  "plain_text": "I am grateful for the following:",
                   "href": null
                }
             ]
