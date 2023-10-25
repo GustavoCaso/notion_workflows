@@ -1,0 +1,346 @@
+{
+  "Results": [
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "What do I want my highlight of the day to be?",
+            "text": {
+              "content": "What do I want my highlight of the day to be?"
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    },
+    {
+      "to_do": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Call or chat with Arlo support to understand if I need a subscription to use their system",
+            "text": {
+              "content": "Call or chat with Arlo support to understand if I need a subscription to use their system"
+            }
+          }
+        ],
+        "checked": true,
+        "color": "default"
+      }
+    },
+    {
+      "to_do": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Make sure to read the tab I already have open",
+            "text": {
+              "content": "Make sure to read the tab I already have open"
+            }
+          }
+        ],
+        "checked": true,
+        "color": "default"
+      }
+    },
+    {
+      "to_do": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Call Ivan and gather information about things to do in Mallorca",
+            "text": {
+              "content": "Call Ivan and gather information about things to do in Mallorca"
+            }
+          }
+        ],
+        "checked": true,
+        "color": "default"
+      }
+    },
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "What other things would be nice to do:",
+            "text": {
+              "content": "What other things would be nice to do:"
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    },
+    {
+      "to_do": {
+        "rich_text": [],
+        "checked": false,
+        "color": "default"
+      }
+    },
+    {
+      "paragraph": {
+        "rich_text": [],
+        "color": "default"
+      }
+    },
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "What is on my mind ",
+            "text": {
+              "content": "What is on my mind "
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    },
+    {
+      "bulleted_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "I told ",
+            "text": {
+              "content": "I told "
+            }
+          },
+          {
+            "type": "mention",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Untitled",
+            "href": "https://www.notion.so/aa3580cda10845a29c19b0e65e22fbcb",
+            "mention": {
+              "type": "page",
+              "page": {
+                "id": "aa3580cd-a108-45a2-9c19-b0e65e22fbcb"
+              }
+            }
+          },
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": " that I wanted to do an embedded on the Agent team. He reacted okay to the news but feared Daix's reaction. I can understand why that is. Still, I had been sincere and clear about my intentions over the past few months. Also, this situation is a learning opportunity. I need to learn that not every decision I make people will like it. If I took the appropriate steps to come to conclusions and deliver the news, what other people think shouldn’t matter too much to me. ",
+            "text": {
+              "content": " that I wanted to do an embedded on the Agent team. He reacted okay to the news but feared Daix's reaction. I can understand why that is. Still, I had been sincere and clear about my intentions over the past few months. Also, this situation is a learning opportunity. I need to learn that not every decision I make people will like it. If I took the appropriate steps to come to conclusions and deliver the news, what other people think shouldn’t matter too much to me. "
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "bulleted_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "I want to be more efficient with my time, but every time I find myself sitting down to read or code to learn, I tend to procrastinate and look for other things. I need to improve that. I need to organize my free time better and prioritize better for the things I want to accomplish each day. ",
+            "text": {
+              "content": "I want to be more efficient with my time, but every time I find myself sitting down to read or code to learn, I tend to procrastinate and look for other things. I need to improve that. I need to organize my free time better and prioritize better for the things I want to accomplish each day. "
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "paragraph": {
+        "rich_text": [],
+        "color": "default"
+      }
+    },
+    {
+      "callout": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Let's reflect on the day.",
+            "text": {
+              "content": "Let's reflect on the day."
+            }
+          }
+        ],
+        "icon": {
+          "type": "emoji",
+          "emoji": "🌙"
+        },
+        "color": "default"
+      }
+    },
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "I am grateful for the following:",
+            "text": {
+              "content": "I am grateful for the following:"
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    },
+    {
+      "numbered_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "For the joy of learning new things every day. ",
+            "text": {
+              "content": "For the joy of learning new things every day. "
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "paragraph": {
+        "rich_text": [],
+        "color": "default"
+      }
+    },
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Three amazing things happened today:",
+            "text": {
+              "content": "Three amazing things happened today:"
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    },
+    {
+      "numbered_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Painful but very effective physical therapy with Ivan.",
+            "text": {
+              "content": "Painful but very effective physical therapy with Ivan."
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "numbered_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "I was able to take the day off from training. The biggest problem is my mind not letting me do it.",
+            "text": {
+              "content": "I was able to take the day off from training. The biggest problem is my mind not letting me do it."
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "numbered_list_item": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "I finally decided on a security camera to test. ",
+            "text": {
+              "content": "I finally decided on a security camera to test. "
+            }
+          }
+        ],
+        "color": "default"
+      }
+    },
+    {
+      "paragraph": {
+        "rich_text": [],
+        "color": "default"
+      }
+    },
+    {
+      "heading_3": {
+        "rich_text": [
+          {
+            "type": "text",
+            "annotations": {
+              "color": "default"
+            },
+            "plain_text": "Anything else?",
+            "text": {
+              "content": "Anything else?"
+            }
+          }
+        ],
+        "color": "default",
+        "is_toggleable": false
+      }
+    }
+  ],
+  "HasMore": false,
+  "NextCursor": null
+}
