@@ -83,14 +83,14 @@ func main() {
 	}
 
 	for notionResponse.HasMore {
+		time.Sleep(3 * time.Second)
+
 		fmt.Printf("more pages \n")
 		fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
 
-		nextQuery := &notion.DatabaseQuery{
-			StartCursor: *notionResponse.NextCursor,
-		}
+		query.StartCursor = *notionResponse.NextCursor
 
-		notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, nextQuery)
+		notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
 		if err != nil {
 			panic(err)
 		}
@@ -110,6 +110,7 @@ func fetchAndSaveToObsidianVault(wg *sync.WaitGroup, client *notion.Client, page
 
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), page.ID, nil)
 	if err != nil {
+		fmt.Println("failed to extact blocks when retriveing daily check page")
 		panic(err)
 	}
 
@@ -190,15 +191,15 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 		case *notion.ToDoBlock:
 			if indent {
 				if *block.Checked {
-					buffer.WriteString("	[x] ")
+					buffer.WriteString("	- [x] ")
 				} else {
-					buffer.WriteString("	[ ] ")
+					buffer.WriteString("	- [ ] ")
 				}
 			} else {
 				if *block.Checked {
-					buffer.WriteString("[x] ")
+					buffer.WriteString("- [x] ")
 				} else {
-					buffer.WriteString("[ ] ")
+					buffer.WriteString("- [ ] ")
 				}
 			}
 			writeRichText(client, buffer, block.RichText)
@@ -282,6 +283,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			if block.Type == notion.FileTypeExternal {
 				buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
 			}
+		case *notion.EmbedBlock:
+			buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
 		case *notion.BookmarkBlock:
 			buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
 		default:
@@ -295,6 +298,7 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 	if block.HasChildren() {
 		pageBlocks, err := client.FindBlockChildrenByID(context.Background(), block.ID(), nil)
 		if err != nil {
+			fmt.Println("failed to extact children blocks")
 			panic(err)
 		}
 		pageToMarkdown(client, pageBlocks.Results, buffer, true)
@@ -345,12 +349,15 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					title := extractRichText(titleRichText)
 
 					if len(title) > 0 {
-						fetchBlocksAndSaveToObsidian(client, text.Mention.Page.ID, path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", title)))
+						if mentionPage.Parent.Type == notion.ParentTypePage {
+							fetchBlocksAndSaveToObsidian(client, mentionPage.ID, path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", title)))
+						}
+
 						buffer.WriteString("[[")
 						buffer.WriteString(title)
 						buffer.WriteString("]]")
 					} else {
-						fmt.Printf("empty title for page id: %s\n", text.Mention.Page.ID)
+						fmt.Printf("empty title for page id: %s\n", mentionPage.ID)
 						saveToObsidianVault(path.Join(obsidianVaultToCategorize, "undefined.md"))
 						buffer.WriteString("[[undefined]]")
 					}
@@ -363,6 +370,12 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					panic(err)
 				}
 				fmt.Printf("Need to figure out what to do with this DB: %s\n", datadasePage.URL)
+			case notion.MentionTypeDate:
+				buffer.WriteString("[[")
+				buffer.WriteString(text.Mention.Date.Start.Format("2006-01-02"))
+				buffer.WriteString("]]")
+			case notion.MentionTypeLinkPreview:
+				buffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
 			default:
 				panic(fmt.Sprintf("mention type no supported: %s", text.Mention.Type))
 			}
@@ -375,6 +388,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 func fetchBlocksAndSaveToObsidian(client *notion.Client, id, path string) {
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), id, nil)
 	if err != nil {
+		fmt.Println("failed to extact blocks when retriveing page")
 		panic(err)
 	}
 
