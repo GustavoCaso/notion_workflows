@@ -83,7 +83,7 @@ func main() {
 	}
 
 	for notionResponse.HasMore {
-		time.Sleep(3 * time.Second)
+		time.Sleep(10 * time.Second)
 
 		fmt.Printf("more pages \n")
 		fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
@@ -349,9 +349,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					title := extractRichText(titleRichText)
 
 					if len(title) > 0 {
-						if mentionPage.Parent.Type == notion.ParentTypePage {
-							fetchBlocksAndSaveToObsidian(client, mentionPage.ID, path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", title)))
-						}
+						fetchBlocksAndSaveToObsidian(client, mentionPage.ID, path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", title)))
 
 						buffer.WriteString("[[")
 						buffer.WriteString(title)
@@ -388,8 +386,8 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 func fetchBlocksAndSaveToObsidian(client *notion.Client, id, path string) {
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), id, nil)
 	if err != nil {
-		fmt.Println("failed to extact blocks when retriveing page")
-		panic(err)
+		fmt.Printf("failed to extact blocks when retriveing page id: %s\n", id)
+		return
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0770); err != nil {
