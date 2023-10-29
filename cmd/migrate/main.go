@@ -82,25 +82,25 @@ func main() {
 		go fetchAndSaveToObsidianVault(wg, client, page, path)
 	}
 
-	for notionResponse.HasMore {
-		time.Sleep(10 * time.Second)
+	// for notionResponse.HasMore {
+	// 	time.Sleep(10 * time.Second)
 
-		fmt.Printf("more pages \n")
-		fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
+	// 	fmt.Printf("more pages \n")
+	// 	fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
 
-		query.StartCursor = *notionResponse.NextCursor
+	// 	query.StartCursor = *notionResponse.NextCursor
 
-		notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
-		if err != nil {
-			panic(err)
-		}
+	// 	notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		for _, page := range notionResponse.Results {
-			wg.Add(1)
-			path := personalNotesPath(page)
-			go fetchAndSaveToObsidianVault(wg, client, page, path)
-		}
-	}
+	// 	for _, page := range notionResponse.Results {
+	// 		wg.Add(1)
+	// 		path := personalNotesPath(page)
+	// 		go fetchAndSaveToObsidianVault(wg, client, page, path)
+	// 	}
+	// }
 
 	wg.Wait()
 }
@@ -129,33 +129,14 @@ func fetchAndSaveToObsidianVault(wg *sync.WaitGroup, client *notion.Client, page
 	buffer := bufio.NewWriter(f)
 
 	props := page.Properties.(notion.DatabasePageProperties)
-	buffer.WriteString("Emotions: ")
 
-	for _, emotion := range props["Emotions"].MultiSelect {
-		saveToObsidianVault(path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", emotion.Name)))
-		buffer.WriteString(fmt.Sprintf("[[%s]] ", emotion.Name))
-	}
-
-	buffer.WriteString("\n\n")
+	propertiesToFrontMatter(props, buffer)
 
 	pageToMarkdown(client, pageBlocks.Results, buffer, false)
 
 	if err := buffer.Flush(); err != nil {
 		panic(err)
 	}
-}
-
-func saveToObsidianVault(obsidianPath string) {
-	if err := os.MkdirAll(filepath.Dir(obsidianPath), 0770); err != nil {
-		panic(err)
-	}
-
-	f, err := os.Create(obsidianPath)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
 }
 
 func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.Writer, indent bool) {
@@ -168,8 +149,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("# ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.Heading2Block:
 			if indent {
 				buffer.WriteString("	## ")
@@ -177,8 +158,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("## ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.Heading3Block:
 			if indent {
 				buffer.WriteString("	### ")
@@ -186,8 +167,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("### ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.ToDoBlock:
 			if indent {
 				if *block.Checked {
@@ -203,8 +184,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				}
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.ParagraphBlock:
 			if len(block.RichText) > 0 {
 				if indent {
@@ -214,8 +195,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 					writeRichText(client, buffer, block.RichText)
 				}
 			}
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.BulletedListItemBlock:
 			if indent {
 				buffer.WriteString("	- ")
@@ -223,8 +204,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("- ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.NumberedListItemBlock:
 			if indent {
 				buffer.WriteString("	- ")
@@ -232,8 +213,8 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("- ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.CalloutBlock:
 			if indent {
 				buffer.WriteString("	> [!")
@@ -255,7 +236,6 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			writeRichText(client, buffer, block.RichText)
 			buffer.WriteString("\n")
 			writeChrildren(client, object, buffer)
-			buffer.WriteString("\n")
 		case *notion.QuoteBlock:
 			if indent {
 				buffer.WriteString("	> ")
@@ -263,35 +243,138 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString("> ")
 			}
 			writeRichText(client, buffer, block.RichText)
-			writeChrildren(client, object, buffer)
 			buffer.WriteString("\n")
+			writeChrildren(client, object, buffer)
 		case *notion.FileBlock:
+			if block.Type == notion.FileTypeExternal {
+				if indent {
+					buffer.WriteString(fmt.Sprintf("	![](%s)", block.External.URL))
+				} else {
+					buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				}
+			}
+			buffer.WriteString("\n")
 		case *notion.DividerBlock:
+			buffer.WriteString("\n")
 		case *notion.ChildPageBlock:
 		case *notion.CodeBlock:
 			buffer.WriteString("```")
 			buffer.WriteString(*block.Language)
 			buffer.WriteString("\n")
 			writeRichText(client, buffer, block.RichText)
+			buffer.WriteString("\n")
 			buffer.WriteString("```")
 			buffer.WriteString("\n")
 		case *notion.ImageBlock:
 			if block.Type == notion.FileTypeExternal {
-				buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				if indent {
+					buffer.WriteString(fmt.Sprintf("	![](%s)", block.External.URL))
+				} else {
+					buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				}
 			}
+			buffer.WriteString("\n")
 		case *notion.VideoBlock:
 			if block.Type == notion.FileTypeExternal {
-				buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				if indent {
+					buffer.WriteString(fmt.Sprintf("	![](%s)", block.External.URL))
+				} else {
+					buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				}
 			}
+			buffer.WriteString("\n")
 		case *notion.EmbedBlock:
-			buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
+			if indent {
+				buffer.WriteString(fmt.Sprintf("	![](%s)", block.URL))
+			} else {
+				buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
+			}
+			buffer.WriteString("\n")
 		case *notion.BookmarkBlock:
-			buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
+			if indent {
+				buffer.WriteString(fmt.Sprintf("	![](%s)", block.URL))
+			} else {
+				buffer.WriteString(fmt.Sprintf("![](%s)", block.URL))
+			}
+			buffer.WriteString("\n")
+		case *notion.ChildDatabaseBlock:
+			if indent {
+				buffer.WriteString(fmt.Sprintf("	%s", block.Title))
+			} else {
+				buffer.WriteString(block.Title)
+			}
+			buffer.WriteString("\n")
 		default:
 			errMessage := fmt.Sprintf("block not supported: %+v", block)
 			panic(errMessage)
 		}
 	}
+}
+
+func propertiesToFrontMatter(propertites notion.DatabasePageProperties, buffer *bufio.Writer) {
+	buffer.WriteString("---\n")
+	for key, value := range propertites {
+		switch value.Type {
+		case notion.DBPropTypeTitle:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, extractPlainTextFromRichText(value.Title)))
+		case notion.DBPropTypeRichText:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, extractPlainTextFromRichText(value.RichText)))
+		case notion.DBPropTypeNumber:
+			buffer.WriteString(fmt.Sprintf("%s: %f\n", key, *value.Number))
+		case notion.DBPropTypeSelect:
+			if value.Select != nil {
+				buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Select.Name))
+			}
+		case notion.DBPropTypeMultiSelect:
+			options := []string{}
+			for _, option := range value.MultiSelect {
+				options = append(options, option.Name)
+			}
+
+			buffer.WriteString(fmt.Sprintf("%s: [%s]\n", key, strings.Join(options[:], ",")))
+		case notion.DBPropTypeDate:
+			if value.Date.Start.HasTime() {
+				buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02T15:04:05")))
+			} else {
+				buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02")))
+			}
+		case notion.DBPropTypePeople:
+		case notion.DBPropTypeFiles:
+		case notion.DBPropTypeCheckbox:
+			buffer.WriteString(fmt.Sprintf("%s: %t\n", key, *value.Checkbox))
+		case notion.DBPropTypeURL:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, *value.URL))
+		case notion.DBPropTypeEmail:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, *value.Email))
+		case notion.DBPropTypePhoneNumber:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, *value.PhoneNumber))
+		case notion.DBPropTypeStatus:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Status.Name))
+		case notion.DBPropTypeFormula:
+		case notion.DBPropTypeRelation:
+		case notion.DBPropTypeRollup:
+			switch value.Rollup.Type {
+			case notion.RollupResultTypeNumber:
+				buffer.WriteString(fmt.Sprintf("%s: %f\n", key, *value.Rollup.Number))
+			case notion.RollupResultTypeDate:
+				if value.Rollup.Date.Start.HasTime() {
+					buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Rollup.Date.Start.Format("2006-01-02T15:04:05")))
+				} else {
+					buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Rollup.Date.Start.Format("2006-01-02")))
+				}
+			}
+		case notion.DBPropTypeCreatedTime:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.CreatedTime.String()))
+		case notion.DBPropTypeCreatedBy:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.CreatedBy.Name))
+		case notion.DBPropTypeLastEditedTime:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.LastEditedTime.String()))
+		case notion.DBPropTypeLastEditedBy:
+			buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.LastEditedBy.Name))
+		default:
+		}
+	}
+	buffer.WriteString("---\n")
 }
 
 func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Writer) {
@@ -325,57 +408,30 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					buffer.WriteString(val)
 					buffer.WriteString("]]")
 				} else {
-					mentionPage, err := client.FindPageByID(context.Background(), text.Mention.Page.ID)
-					if err != nil {
-						panic(err)
-					}
+					value := text.PlainText
+					buffer.WriteString("[[")
+					buffer.WriteString(value)
+					buffer.WriteString("]]")
 
-					var titleRichText []notion.RichText
-					if mentionPage.Parent.Type == notion.ParentTypeDatabase {
-						props := mentionPage.Properties.(notion.DatabasePageProperties)
-						titleRichText = props["Name"].Title
-					} else if mentionPage.Parent.Type == notion.ParentTypePage {
-						props := mentionPage.Properties.(notion.PageProperties)
-						titleRichText = props.Title.Title
-					} else if mentionPage.Parent.Type == notion.ParentTypeBlock {
-						fmt.Printf("check what this block id is: %s\n", mentionPage.Parent.BlockID)
-					} else if mentionPage.Parent.Type == "" {
-						fmt.Printf("empty parent type for page %s\n", text.Mention.Page.ID)
-					} else {
-						errMessage := fmt.Sprintf("mention page not supported: %s", mentionPage.Parent.Type)
-						panic(errMessage)
-					}
+					// Get Page Database name for saving the page on the DB_name/value.md
+					childPath := path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", value))
+					fetchBlocksAndSaveToObsidian(client, text.Mention.Page.ID, childPath)
 
-					title := extractRichText(titleRichText)
-
-					if len(title) > 0 {
-						fetchBlocksAndSaveToObsidian(client, mentionPage.ID, path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", title)))
-
-						buffer.WriteString("[[")
-						buffer.WriteString(title)
-						buffer.WriteString("]]")
-					} else {
-						fmt.Printf("empty title for page id: %s\n", mentionPage.ID)
-						saveToObsidianVault(path.Join(obsidianVaultToCategorize, "undefined.md"))
-						buffer.WriteString("[[undefined]]")
-					}
-
-					mentionCache.Set(text.Mention.Page.ID, title)
+					mentionCache.Set(text.Mention.Page.ID, value)
 				}
 			case notion.MentionTypeDatabase:
-				datadasePage, err := client.FindDatabaseByID(context.Background(), text.Mention.Database.ID)
-				if err != nil {
-					panic(err)
-				}
-				fmt.Printf("Need to figure out what to do with this DB: %s\n", datadasePage.URL)
+				value := text.PlainText
+				buffer.WriteString("[[")
+				buffer.WriteString(value)
+				buffer.WriteString("]]")
 			case notion.MentionTypeDate:
 				buffer.WriteString("[[")
 				buffer.WriteString(text.Mention.Date.Start.Format("2006-01-02"))
 				buffer.WriteString("]]")
 			case notion.MentionTypeLinkPreview:
 				buffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
-			default:
-				panic(fmt.Sprintf("mention type no supported: %s", text.Mention.Type))
+			case notion.MentionTypeTemplateMention:
+			case notion.MentionTypeUser:
 			}
 		case notion.RichTextTypeEquation:
 			buffer.WriteString(fmt.Sprintf("$%s$", text.Equation.Expression))
@@ -411,16 +467,11 @@ func fetchBlocksAndSaveToObsidian(client *notion.Client, id, path string) {
 	}
 }
 
-func extractRichText(richText []notion.RichText) string {
+func extractPlainTextFromRichText(richText []notion.RichText) string {
 	buffer := new(strings.Builder)
 
 	for _, text := range richText {
-		switch text.Type {
-		case notion.RichTextTypeText:
-			buffer.WriteString(text.Text.Content)
-		default:
-			fmt.Printf("do not support extract rich text value for this type: %s\n", text.Type)
-		}
+		buffer.WriteString(text.PlainText)
 	}
 
 	return buffer.String()
@@ -429,7 +480,6 @@ func extractRichText(richText []notion.RichText) string {
 func personalNotesPath(page notion.Page) string {
 	properties := page.Properties.(notion.DatabasePageProperties)
 	date := properties["Date"].Date.Start
-	dayOfTheWeek := &properties["Day of the Week"].Formula.String
-	fileName := fmt.Sprintf("%s-%s.md", date.Format("2006-01-02"), **dayOfTheWeek)
+	fileName := fmt.Sprintf("%s-%s.md", date.Format("2006-01-02"), date.Weekday())
 	return path.Join(obsidianVault, fmt.Sprint(date.Year()), fmt.Sprintf("%d-%s", int(date.Month()), date.Month().String()), fileName)
 }
