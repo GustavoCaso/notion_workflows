@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	dailyCheckDatabaseID      = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
-	obsidianVault             = "/Users/gustavocaso/Documents/Obsidian Vault/Thoughts/Personal Notes"
-	obsidianVaultToCategorize = "/Users/gustavocaso/Documents/Obsidian Vault/Thoughts/Personal Notes/Categorize"
+	dailyCheckDatabaseID = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
+	obsidianVault        = "/Users/gustavocaso/Documents/Obsidian Vault/Thoughts/Personal Notes"
 )
 
 type cache struct {
@@ -47,6 +46,7 @@ func newCache() *cache {
 }
 
 var mentionCache = newCache()
+var wg = new(sync.WaitGroup)
 
 func main() {
 	client := notion.NewClient(utils.GetAuthenticationToken())
@@ -74,44 +74,42 @@ func main() {
 		panic(err)
 	}
 
-	wg := new(sync.WaitGroup)
-
 	for _, page := range notionResponse.Results {
 		wg.Add(1)
 		path := personalNotesPath(page)
-		go fetchAndSaveToObsidianVault(wg, client, page, path)
+		go fetchAndSaveToObsidianVault(client, page, path)
 	}
 
-	// for notionResponse.HasMore {
-	// 	time.Sleep(10 * time.Second)
+	for notionResponse.HasMore {
+		time.Sleep(20 * time.Second)
 
-	// 	fmt.Printf("more pages \n")
-	// 	fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
+		fmt.Printf("more pages \n")
+		fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
 
-	// 	query.StartCursor = *notionResponse.NextCursor
+		query.StartCursor = *notionResponse.NextCursor
 
-	// 	notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
+		notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
+		if err != nil {
+			panic(err)
+		}
 
-	// 	for _, page := range notionResponse.Results {
-	// 		wg.Add(1)
-	// 		path := personalNotesPath(page)
-	// 		go fetchAndSaveToObsidianVault(wg, client, page, path)
-	// 	}
-	// }
+		for _, page := range notionResponse.Results {
+			wg.Add(1)
+			path := personalNotesPath(page)
+			go fetchAndSaveToObsidianVault(client, page, path)
+		}
+	}
 
 	wg.Wait()
 }
 
-func fetchAndSaveToObsidianVault(wg *sync.WaitGroup, client *notion.Client, page notion.Page, obsidianPath string) {
+func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, obsidianPath string) {
 	defer wg.Done()
 
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), page.ID, nil)
 	if err != nil {
-		fmt.Println("failed to extact blocks when retriveing daily check page")
-		panic(err)
+		fmt.Printf("failed to extact blocks when retriveing page. Skipping block with ID: %s\n", page.ID)
+		return
 	}
 
 	if err := os.MkdirAll(filepath.Dir(obsidianPath), 0770); err != nil {
@@ -333,10 +331,12 @@ func propertiesToFrontMatter(propertites notion.DatabasePageProperties, buffer *
 
 			buffer.WriteString(fmt.Sprintf("%s: [%s]\n", key, strings.Join(options[:], ",")))
 		case notion.DBPropTypeDate:
-			if value.Date.Start.HasTime() {
-				buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02T15:04:05")))
-			} else {
-				buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02")))
+			if value.Date != nil {
+				if value.Date.Start.HasTime() {
+					buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02T15:04:05")))
+				} else {
+					buffer.WriteString(fmt.Sprintf("%s: %s\n", key, value.Date.Start.Format("2006-01-02")))
+				}
 			}
 		case notion.DBPropTypePeople:
 		case notion.DBPropTypeFiles:
@@ -408,16 +408,30 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					buffer.WriteString(val)
 					buffer.WriteString("]]")
 				} else {
-					value := text.PlainText
+					pageTitle := text.PlainText
+
+					mentionPage, err := client.FindPageByID(context.Background(), text.Mention.Page.ID)
+					if err != nil {
+						panic(err)
+					}
+
+					if mentionPage.Parent.Type == notion.ParentTypeDatabase {
+						dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
+						if err != nil {
+							panic(err)
+						}
+						dbTitle := extractPlainTextFromRichText(dbPage.Title)
+
+						childPath := path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
+						wg.Add(1)
+						fetchAndSaveToObsidianVault(client, mentionPage, path.Join(obsidianVault, childPath))
+					}
+
 					buffer.WriteString("[[")
-					buffer.WriteString(value)
+					buffer.WriteString(pageTitle)
 					buffer.WriteString("]]")
 
-					// Get Page Database name for saving the page on the DB_name/value.md
-					childPath := path.Join(obsidianVaultToCategorize, fmt.Sprintf("%s.md", value))
-					fetchBlocksAndSaveToObsidian(client, text.Mention.Page.ID, childPath)
-
-					mentionCache.Set(text.Mention.Page.ID, value)
+					mentionCache.Set(text.Mention.Page.ID, pageTitle)
 				}
 			case notion.MentionTypeDatabase:
 				value := text.PlainText
@@ -436,34 +450,6 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 		case notion.RichTextTypeEquation:
 			buffer.WriteString(fmt.Sprintf("$%s$", text.Equation.Expression))
 		}
-	}
-}
-
-func fetchBlocksAndSaveToObsidian(client *notion.Client, id, path string) {
-	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), id, nil)
-	if err != nil {
-		fmt.Printf("failed to extact blocks when retriveing page id: %s\n", id)
-		return
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0770); err != nil {
-		panic(err)
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
-	// create new buffer
-	buffer := bufio.NewWriter(f)
-
-	pageToMarkdown(client, pageBlocks.Results, buffer, false)
-
-	if err := buffer.Flush(); err != nil {
-		panic(err)
 	}
 }
 
