@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path"
@@ -11,13 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GustavoCaso/notion_workflows/pkg/utils"
 	"github.com/dstotijn/go-notion"
-)
-
-const (
-	dailyCheckDatabaseID = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
-	obsidianVault        = "/Users/gustavocaso/Documents/Obsidian Vault/Thoughts/Personal Notes"
 )
 
 type cache struct {
@@ -48,8 +43,32 @@ func newCache() *cache {
 var mentionCache = newCache()
 var wg = new(sync.WaitGroup)
 
+var token = flag.String("token", os.Getenv("NOTION_TOKEN"), "notion token")
+var databaseID = flag.String("id", os.Getenv("NOTION_DATABASE_ID"), "notion database ID to migrate")
+var obsidianVault = flag.String("d", os.Getenv("OBSIDIAN_VAULT_PATH"), "Obsidian vault location")
+
 func main() {
-	client := notion.NewClient(utils.GetAuthenticationToken())
+	flag.Parse()
+
+	if empty(token) {
+		flag.Usage()
+		fmt.Println("You must provide the notion token to run the script")
+		os.Exit(1)
+	}
+
+	if empty(databaseID) {
+		flag.Usage()
+		fmt.Println("You must provide the notion database id to run the script")
+		os.Exit(1)
+	}
+
+	if empty(obsidianVault) {
+		flag.Usage()
+		fmt.Println("You must provide the obisidian vault path to run the script")
+		os.Exit(1)
+	}
+
+	client := notion.NewClient(*token)
 
 	filterTime, _ := time.Parse(time.RFC3339, "2020-01-01")
 	query := &notion.DatabaseQuery{
@@ -69,7 +88,7 @@ func main() {
 		},
 	}
 
-	notionResponse, err := client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
+	notionResponse, err := client.QueryDatabase(context.Background(), *databaseID, query)
 	if err != nil {
 		panic(err)
 	}
@@ -101,6 +120,10 @@ func main() {
 	}
 
 	wg.Wait()
+}
+
+func empty(v *string) bool {
+	return *v == ""
 }
 
 func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, obsidianPath string) {
@@ -424,7 +447,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 						childPath := path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
 						wg.Add(1)
-						fetchAndSaveToObsidianVault(client, mentionPage, path.Join(obsidianVault, childPath))
+						fetchAndSaveToObsidianVault(client, mentionPage, path.Join(*obsidianVault, childPath))
 					}
 
 					buffer.WriteString("[[")
@@ -467,5 +490,5 @@ func personalNotesPath(page notion.Page) string {
 	properties := page.Properties.(notion.DatabasePageProperties)
 	date := properties["Date"].Date.Start
 	fileName := fmt.Sprintf("%s-%s.md", date.Format("2006-01-02"), date.Weekday())
-	return path.Join(obsidianVault, fmt.Sprint(date.Year()), fmt.Sprintf("%d-%s", int(date.Month()), date.Month().String()), fileName)
+	return path.Join(*obsidianVault, fmt.Sprint(date.Year()), fmt.Sprintf("%d-%s", int(date.Month()), date.Month().String()), fileName)
 }
