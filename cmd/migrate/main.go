@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -41,10 +42,85 @@ func newCache() *cache {
 }
 
 var mentionCache = newCache()
-var wg = new(sync.WaitGroup)
+
+type job struct {
+	run func() error
+}
+
+type errJob struct {
+	job job
+	err error
+}
+
+type queue struct {
+	jobs   chan job
+	cancel context.CancelFunc
+	ctx    context.Context
+}
+
+func newQueue() *queue {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &queue{
+		jobs:   make(chan job),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func (q *queue) addJobs(jobs []job) {
+	var wg sync.WaitGroup
+	wg.Add(len(jobs))
+
+	for _, pageJob := range jobs {
+		go func(job job) {
+			q.addJob(job)
+			wg.Done()
+		}(pageJob)
+	}
+
+	go func() {
+		wg.Wait()
+		q.cancel()
+	}()
+}
+
+func (q *queue) addJob(job job) {
+	q.jobs <- job
+}
+
+type worker struct {
+	queue     *queue
+	errorJobs []errJob
+}
+
+func (w *worker) doWork() bool {
+	for {
+		select {
+		case <-w.queue.ctx.Done():
+			fmt.Print("Finish migrating pages\n")
+			return true
+		case job := <-w.queue.jobs:
+			err := job.run()
+			if err != nil {
+				errJob := errJob{
+					job: job,
+					err: err,
+				}
+				w.errorJobs = append(w.errorJobs, errJob)
+				continue
+			}
+		}
+	}
+}
+
+var databaseIDUsage = `notion database ID to migrate.
+If you want to specify the propeties to convert to frontmater use a colon and provide a comma separated list. Ex ID:name,date
+If you rather want to provide a skip list separate the ID and the skip list using >. Ex ID>day of the week,date
+`
 
 var token = flag.String("token", os.Getenv("NOTION_TOKEN"), "notion token")
-var databaseID = flag.String("id", os.Getenv("NOTION_DATABASE_ID"), "notion database ID to migrate")
+var databaseID = flag.String("id", os.Getenv("NOTION_DATABASE_ID"), databaseIDUsage)
 var obsidianVault = flag.String("d", os.Getenv("OBSIDIAN_VAULT_PATH"), "Obsidian vault location")
 
 func main() {
@@ -59,6 +135,33 @@ func main() {
 	if empty(databaseID) {
 		flag.Usage()
 		fmt.Println("You must provide the notion database id to run the script")
+		os.Exit(1)
+	}
+
+	databaseIDCopy := *databaseID
+	dbPropertiesSet := map[string]bool{}
+	dbPropertiesSkipSet := map[string]bool{}
+
+	results := strings.Split(databaseIDCopy, ":")
+	if len(results) > 1 {
+		dbProperties := strings.Split(results[1], ",")
+		for _, dbProp := range dbProperties {
+			dbPropertiesSet[strings.ToLower(dbProp)] = true
+		}
+	}
+
+	results = strings.Split(databaseIDCopy, ">")
+	if len(results) > 1 {
+		dbPropertiesToSkip := strings.Split(results[1], ",")
+		for _, dbProp := range dbPropertiesToSkip {
+			dbPropertiesSkipSet[strings.ToLower(dbProp)] = true
+		}
+	}
+
+	databaseID = &results[0]
+
+	if len(dbPropertiesSet) > 0 && len(dbPropertiesSkipSet) > 0 {
+		fmt.Println("You can not provide both skip list and include list for DB properties")
 		os.Exit(1)
 	}
 
@@ -88,60 +191,85 @@ func main() {
 		},
 	}
 
-	notionResponse, err := client.QueryDatabase(context.Background(), *databaseID, query)
-	if err != nil {
-		panic(err)
-	}
+	pages, _ := fetchNotionDBPages(client, query)
 
-	for _, page := range notionResponse.Results {
-		wg.Add(1)
-		path := personalNotesPath(page)
-		go fetchAndSaveToObsidianVault(client, page, path)
-	}
+	// Print progress bar
 
-	for notionResponse.HasMore {
-		time.Sleep(20 * time.Second)
+	var jobs []job
 
-		fmt.Printf("more pages \n")
-		fmt.Printf("next cursor: %s\n", *notionResponse.NextCursor)
+	queue := newQueue()
 
-		query.StartCursor = *notionResponse.NextCursor
+	for _, page := range pages {
+		// We need to do this, because variables declared in for loops are passed by reference.
+		// Otherwise, our closure will always receive the last item from the page.
+		newPage := page
 
-		notionResponse, err = client.QueryDatabase(context.Background(), dailyCheckDatabaseID, query)
-		if err != nil {
-			panic(err)
+		job := job{
+			run: func() error {
+				path := personalNotesPath(newPage)
+				return fetchAndSaveToObsidianVault(client, newPage, dbPropertiesSet, dbPropertiesSkipSet, path)
+			},
 		}
 
-		for _, page := range notionResponse.Results {
-			wg.Add(1)
-			path := personalNotesPath(page)
-			go fetchAndSaveToObsidianVault(client, page, path)
-		}
+		jobs = append(jobs, job)
 	}
 
-	wg.Wait()
+	// enequeue page to download and parse
+	queue.addJobs(jobs)
+	// make sure that we take into a ccount the rate limit constraint from notion
+
+	worker := worker{
+		queue: queue,
+	}
+
+	worker.doWork()
+
+	for _, errJob := range worker.errorJobs {
+		fmt.Printf("an error ocurred when processing a page %v\n", errors.Unwrap(errJob.err))
+	}
 }
 
 func empty(v *string) bool {
 	return *v == ""
 }
 
-func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, obsidianPath string) {
-	defer wg.Done()
+func fetchNotionDBPages(client *notion.Client, query *notion.DatabaseQuery) ([]notion.Page, error) {
+	notionResponse, err := client.QueryDatabase(context.Background(), *databaseID, query)
+	if err != nil {
+		panic(err)
+	}
 
+	result := []notion.Page{}
+
+	result = append(result, notionResponse.Results...)
+
+	for notionResponse.HasMore {
+		query.StartCursor = *notionResponse.NextCursor
+
+		notionResponse, err = client.QueryDatabase(context.Background(), *databaseID, query)
+		if err != nil {
+			panic(err)
+		}
+
+		result = append(result, notionResponse.Results...)
+	}
+
+	return result, nil
+}
+
+func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, pagePropertiesToInclude, pagePropertiesToSkip map[string]bool, obsidianPath string) error {
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), page.ID, nil)
 	if err != nil {
-		fmt.Printf("failed to extact blocks when retriveing page. Skipping block with ID: %s\n", page.ID)
-		return
+		return fmt.Errorf("failed to extract children blocks for block ID %s. error: %w", page.ID, err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(obsidianPath), 0770); err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create the necessary directories in for the Obsidian vault.  error: %w", err)
 	}
 
 	f, err := os.Create(obsidianPath)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create the markdown file %s. error: %w", path.Base(obsidianPath), err)
 	}
 
 	defer f.Close()
@@ -151,16 +279,42 @@ func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, obsidi
 
 	props := page.Properties.(notion.DatabasePageProperties)
 
-	propertiesToFrontMatter(props, buffer)
+	selectedProps := make(notion.DatabasePageProperties)
 
-	pageToMarkdown(client, pageBlocks.Results, buffer, false)
-
-	if err := buffer.Flush(); err != nil {
-		panic(err)
+	if len(pagePropertiesToInclude) > 0 {
+		for propName, propValue := range props {
+			if pagePropertiesToInclude[strings.ToLower(propName)] {
+				selectedProps[propName] = propValue
+			}
+		}
 	}
+
+	if len(pagePropertiesToSkip) > 0 {
+		for propName, propValue := range props {
+			if !pagePropertiesToSkip[strings.ToLower(propName)] {
+				selectedProps[propName] = propValue
+			}
+		}
+	}
+
+	propertiesToFrontMatter(selectedProps, buffer)
+
+	err = pageToMarkdown(client, pageBlocks.Results, buffer, false)
+
+	if err != nil {
+		return fmt.Errorf("failed to convert page tp markdown. error: %w", err)
+	}
+
+	if err = buffer.Flush(); err != nil {
+		return fmt.Errorf("failed to write into the markdown file %s. error: %w", path.Base(obsidianPath), err)
+	}
+
+	return nil
 }
 
-func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.Writer, indent bool) {
+func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.Writer, indent bool) error {
+	var err error
+
 	for _, object := range blocks {
 		switch block := object.(type) {
 		case *notion.Heading1Block:
@@ -169,27 +323,39 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			} else {
 				buffer.WriteString("# ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.Heading2Block:
 			if indent {
 				buffer.WriteString("	## ")
 			} else {
 				buffer.WriteString("## ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.Heading3Block:
 			if indent {
 				buffer.WriteString("	### ")
 			} else {
 				buffer.WriteString("### ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.ToDoBlock:
 			if indent {
 				if *block.Checked {
@@ -204,38 +370,56 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 					buffer.WriteString("- [ ] ")
 				}
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.ParagraphBlock:
 			if len(block.RichText) > 0 {
 				if indent {
 					buffer.WriteString("	")
-					writeRichText(client, buffer, block.RichText)
+					if err = writeRichText(client, buffer, block.RichText); err != nil {
+						return err
+					}
 				} else {
-					writeRichText(client, buffer, block.RichText)
+					if err = writeRichText(client, buffer, block.RichText); err != nil {
+						return err
+					}
 				}
 			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.BulletedListItemBlock:
 			if indent {
 				buffer.WriteString("	- ")
 			} else {
 				buffer.WriteString("- ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.NumberedListItemBlock:
 			if indent {
 				buffer.WriteString("	- ")
 			} else {
 				buffer.WriteString("- ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.CalloutBlock:
 			if indent {
 				buffer.WriteString("	> [!")
@@ -245,7 +429,9 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			if len(*block.Icon.Emoji) > 0 {
 				buffer.WriteString(*block.Icon.Emoji)
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("]")
 			buffer.WriteString("\n")
 		case *notion.ToggleBlock:
@@ -254,18 +440,26 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			} else {
 				buffer.WriteString("- ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.QuoteBlock:
 			if indent {
 				buffer.WriteString("	> ")
 			} else {
 				buffer.WriteString("> ")
 			}
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
-			writeChrildren(client, object, buffer)
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		case *notion.FileBlock:
 			if block.Type == notion.FileTypeExternal {
 				if indent {
@@ -282,7 +476,9 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			buffer.WriteString("```")
 			buffer.WriteString(*block.Language)
 			buffer.WriteString("\n")
-			writeRichText(client, buffer, block.RichText)
+			if err = writeRichText(client, buffer, block.RichText); err != nil {
+				return err
+			}
 			buffer.WriteString("\n")
 			buffer.WriteString("```")
 			buffer.WriteString("\n")
@@ -326,10 +522,11 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			}
 			buffer.WriteString("\n")
 		default:
-			errMessage := fmt.Sprintf("block not supported: %+v", block)
-			panic(errMessage)
+			return fmt.Errorf("block not supported: %+v", block)
 		}
 	}
+
+	return nil
 }
 
 func propertiesToFrontMatter(propertites notion.DatabasePageProperties, buffer *bufio.Writer) {
@@ -400,18 +597,19 @@ func propertiesToFrontMatter(propertites notion.DatabasePageProperties, buffer *
 	buffer.WriteString("---\n")
 }
 
-func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Writer) {
+func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Writer) error {
 	if block.HasChildren() {
 		pageBlocks, err := client.FindBlockChildrenByID(context.Background(), block.ID(), nil)
 		if err != nil {
-			fmt.Println("failed to extact children blocks")
-			panic(err)
+			return fmt.Errorf("failed to extract children blocks for block ID %s. error: %w", block.ID(), err)
 		}
-		pageToMarkdown(client, pageBlocks.Results, buffer, true)
+		return pageToMarkdown(client, pageBlocks.Results, buffer, true)
 	}
+
+	return nil
 }
 
-func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) {
+func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
 	for _, text := range richText {
 		switch text.Type {
 		case notion.RichTextTypeText:
@@ -435,19 +633,21 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 					mentionPage, err := client.FindPageByID(context.Background(), text.Mention.Page.ID)
 					if err != nil {
-						panic(err)
+						return fmt.Errorf("failed to find mention page %s.  error: %w", text.Mention.Page.ID, err)
 					}
 
 					if mentionPage.Parent.Type == notion.ParentTypeDatabase {
 						dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
 						if err != nil {
-							panic(err)
+							return fmt.Errorf("failed to find db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
 						}
 						dbTitle := extractPlainTextFromRichText(dbPage.Title)
 
 						childPath := path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
-						wg.Add(1)
-						fetchAndSaveToObsidianVault(client, mentionPage, path.Join(*obsidianVault, childPath))
+						emptyList := map[string]bool{}
+						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath)); err != nil {
+							return err
+						}
 					}
 
 					buffer.WriteString("[[")
@@ -474,6 +674,8 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 			buffer.WriteString(fmt.Sprintf("$%s$", text.Equation.Expression))
 		}
 	}
+
+	return nil
 }
 
 func extractPlainTextFromRichText(richText []notion.RichText) string {
