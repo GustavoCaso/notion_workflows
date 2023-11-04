@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	dailyCheckDatabaseID    = "3b27a5d9-138b-4f50-9c7b-7a77224f0579"
 	habitTrackerDatabaseID  = "9e031d67-5c5f-4183-9e1c-7e2e9330cae3"
 	MonthTrackingDatabaseID = "83ab95f9-d1d9-489e-b761-8dfbe839ba37"
 	WeekTrackingDatabaseID  = "8a9a5eb6-8d2c-49a5-a286-ececece9b2b5"
@@ -213,7 +212,7 @@ func generateMonthsPages(client client.NotionClient, monthData monthData) {
 			generateDayPages(client, day, &pagesIds)
 		}
 
-		fmt.Printf("Create week page for SartDate: %s, EndDate: %s\n", week.days[0].Format(DATE_FORMAT), week.days[len(week.days)-1].Format(DATE_FORMAT))
+		fmt.Printf("Create week page for StartDate: %s, EndDate: %s\n", week.days[0].Format(DATE_FORMAT), week.days[len(week.days)-1].Format(DATE_FORMAT))
 		weekPageInfo := weekPageInfo{
 			StartDate:            week.days[0].Format(DATE_FORMAT),
 			EndDate:              week.days[len(week.days)-1].Format(DATE_FORMAT),
@@ -247,14 +246,6 @@ func generateDayPages(client client.NotionClient, currentDay time.Time, pageIds 
 	}
 
 	habitTrackerPageID := createTrackingPage(client, habitPageInfo)
-
-	daylyCheckPageInfo := dailyCheckPageInfo{
-		Date:  date,
-		Title: title,
-	}
-
-	createDailyCheckPage(client, daylyCheckPageInfo)
-	fmt.Printf("Success creating daily check and tracking for %s\n", currentDay)
 
 	pageIds.habitTrakerPageIDs = append(pageIds.habitTrakerPageIDs, habitTrackerPageID)
 }
@@ -336,18 +327,6 @@ func createTrackingPage(client client.NotionClient, pageInfo trackingPageInfo) s
 
 	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
 	response := client.FindOrCreatePage(pageInfo.DatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
-
-	return response.ID
-}
-
-func createDailyCheckPage(client client.NotionClient, pageInfo dailyCheckPageInfo) string {
-	buf, err := utils.ExecuteTemplate("templates/daily_check_page.json", "createDailyCheckPage", pageInfo)
-	if err != nil {
-		panic(err)
-	}
-
-	filter := fmt.Sprintf(filterQuery, pageInfo.Title)
-	response := client.FindOrCreatePage(dailyCheckDatabaseID, bytes.NewBuffer([]byte(filter)), bytes.NewBuffer(buf.Bytes()))
 
 	return response.ID
 }
