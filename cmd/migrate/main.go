@@ -15,6 +15,7 @@ import (
 
 	"github.com/dstotijn/go-notion"
 	"github.com/itchyny/timefmt-go"
+	"github.com/schollz/progressbar/v3"
 )
 
 type cache struct {
@@ -43,6 +44,7 @@ func newCache() *cache {
 }
 
 var mentionCache = newCache()
+var globalBar *progressbar.ProgressBar
 
 type job struct {
 	run func() error
@@ -76,6 +78,7 @@ func (q *queue) addJobs(jobs []job) {
 	for _, pageJob := range jobs {
 		go func(job job) {
 			q.addJob(job)
+			globalBar.Add(1)
 			wg.Done()
 		}(pageJob)
 	}
@@ -230,6 +233,8 @@ func main() {
 
 		jobs = append(jobs, job)
 	}
+
+	globalBar = progressbar.Default(int64(len(jobs)), "migrating notion pages")
 
 	// enequeue page to download and parse
 	queue.addJobs(jobs)
