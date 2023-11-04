@@ -24,11 +24,6 @@ type trackingPageInfo struct {
 	Title      string
 }
 
-type dailyCheckPageInfo struct {
-	Date  string
-	Title string
-}
-
 type weekPageInfo struct {
 	StartDate            string
 	EndDate              string
