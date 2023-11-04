@@ -508,6 +508,7 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			}
 			buffer.WriteString("\n")
 		case *notion.DividerBlock:
+			buffer.WriteString("---")
 			buffer.WriteString("\n")
 		case *notion.ChildPageBlock:
 		case *notion.CodeBlock:
@@ -647,25 +648,23 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 	return nil
 }
 
+// TODO: Handle annotations
 func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
 	for _, text := range richText {
 		switch text.Type {
 		case notion.RichTextTypeText:
-			if text.Annotations.Color == notion.ColorDefault {
-				buffer.WriteString(text.Text.Content)
+			link := text.Text.Link
+			if link != nil {
+				buffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
 			} else {
-				buffer.WriteString("==")
 				buffer.WriteString(text.Text.Content)
-				buffer.WriteString("==")
 			}
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
 				val, ok := mentionCache.Get(text.Mention.Page.ID)
 				if ok {
-					buffer.WriteString("[[")
 					buffer.WriteString(val)
-					buffer.WriteString("]]")
 				} else {
 					pageTitle := text.PlainText
 
@@ -688,11 +687,10 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 						}
 					}
 
-					buffer.WriteString("[[")
-					buffer.WriteString(pageTitle)
-					buffer.WriteString("]]")
+					pageMention := "[[" + pageTitle + "]]"
+					buffer.WriteString(pageMention)
 
-					mentionCache.Set(text.Mention.Page.ID, pageTitle)
+					mentionCache.Set(text.Mention.Page.ID, pageMention)
 				}
 			case notion.MentionTypeDatabase:
 				value := text.PlainText
@@ -714,6 +712,54 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 	}
 
 	return nil
+}
+
+func include(elem string, container []string) bool {
+	for _, e := range container {
+		if e == elem {
+			return true
+		}
+	}
+
+	return false
+}
+
+func annotationsToStyle(annotations *notion.Annotations) string {
+	style := ""
+	if annotations.Bold {
+		style += "**"
+	}
+
+	if annotations.Strikethrough {
+		style += "~~"
+	}
+
+	if annotations.Italic {
+		style += "_"
+	}
+
+	if annotations.Code {
+		style += "`"
+	}
+
+	if annotations.Color != notion.ColorDefault {
+		style += "=="
+	}
+
+	return style
+}
+
+func reverseString(s string) string {
+	rns := []rune(s) // convert to rune
+	for i, j := 0, len(rns)-1; i < j; i, j = i+1, j-1 {
+
+		// swap the letters of the string,
+		// like first with last and so on.
+		rns[i], rns[j] = rns[j], rns[i]
+	}
+
+	// return the reversed string.
+	return string(rns)
 }
 
 func extractPlainTextFromRichText(richText []notion.RichText) string {
