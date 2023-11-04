@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dstotijn/go-notion"
+	"github.com/itchyny/timefmt-go"
 )
 
 type cache struct {
@@ -114,6 +115,8 @@ func (w *worker) doWork() bool {
 	}
 }
 
+type pathAttributes map[string]string
+
 var databaseIDUsage = `notion database ID to migrate.
 If you want to specify the propeties to convert to frontmater use a colon and provide a comma separated list. Ex ID:name,date
 If you rather want to provide a skip list separate the ID and the skip list using >. Ex ID>day of the week,date
@@ -121,7 +124,8 @@ If you rather want to provide a skip list separate the ID and the skip list usin
 
 var token = flag.String("token", os.Getenv("NOTION_TOKEN"), "notion token")
 var databaseID = flag.String("id", os.Getenv("NOTION_DATABASE_ID"), databaseIDUsage)
-var obsidianVault = flag.String("d", os.Getenv("OBSIDIAN_VAULT_PATH"), "Obsidian vault location")
+var obsidianVault = flag.String("vault", os.Getenv("OBSIDIAN_VAULT_PATH"), "Obsidian vault location")
+var pagePath = flag.String("path", "", "Page path in which to store the pages. Support selecting different page attribute and formatting")
 
 func main() {
 	flag.Parse()
@@ -171,6 +175,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	pagePathFilters := pathAttributes{}
+	if !empty(pagePath) {
+		pagePathResults := strings.Split(*pagePath, ",")
+		for _, pagePathAttribute := range pagePathResults {
+			pageWithFormatOptions := strings.Split(pagePathAttribute, ":")
+			if len(pageWithFormatOptions) > 1 {
+				pagePathFilters[strings.ToLower(pageWithFormatOptions[0])] = pageWithFormatOptions[1]
+			} else {
+				pagePathFilters[strings.ToLower(pageWithFormatOptions[0])] = ""
+			}
+		}
+	}
+
 	client := notion.NewClient(*token)
 
 	filterTime, _ := time.Parse(time.RFC3339, "2020-01-01")
@@ -206,7 +223,7 @@ func main() {
 
 		job := job{
 			run: func() error {
-				path := personalNotesPath(newPage)
+				path := filePath(newPage, pagePathFilters)
 				return fetchAndSaveToObsidianVault(client, newPage, dbPropertiesSet, dbPropertiesSkipSet, path)
 			},
 		}
@@ -231,6 +248,27 @@ func main() {
 
 func empty(v *string) bool {
 	return *v == ""
+}
+
+func filePath(page notion.Page, pagePathProperties pathAttributes) string {
+	properties := page.Properties.(notion.DatabasePageProperties)
+	var str string
+	for key, value := range properties {
+		val, ok := pagePathProperties[strings.ToLower(key)]
+		if ok {
+			switch value.Type {
+			case notion.DBPropTypeDate:
+				date := value.Date.Start
+				if val != "" {
+					str += timefmt.Format(date.Time, "%Y/%B/%d-%A")
+				}
+			default:
+				panic("not suported")
+			}
+		}
+	}
+	fileName := fmt.Sprintf("%s.md", str)
+	return path.Join(*obsidianVault, fileName)
 }
 
 func fetchNotionDBPages(client *notion.Client, query *notion.DatabaseQuery) ([]notion.Page, error) {
@@ -686,11 +724,4 @@ func extractPlainTextFromRichText(richText []notion.RichText) string {
 	}
 
 	return buffer.String()
-}
-
-func personalNotesPath(page notion.Page) string {
-	properties := page.Properties.(notion.DatabasePageProperties)
-	date := properties["Date"].Date.Start
-	fileName := fmt.Sprintf("%s-%s.md", date.Format("2006-01-02"), date.Weekday())
-	return path.Join(*obsidianVault, fmt.Sprint(date.Year()), fmt.Sprintf("%d-%s", int(date.Month()), date.Month().String()), fileName)
 }
