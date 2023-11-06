@@ -44,7 +44,6 @@ func newCache() *cache {
 }
 
 var mentionCache = newCache()
-var globalBar *progressbar.ProgressBar
 
 type job struct {
 	run func() error
@@ -56,41 +55,60 @@ type errJob struct {
 }
 
 type queue struct {
-	jobs   chan job
-	cancel context.CancelFunc
-	ctx    context.Context
+	jobs        chan job
+	progressBar *progressbar.ProgressBar
+	wg          sync.WaitGroup
+	cancel      context.CancelFunc
+	ctx         context.Context
 }
 
-func newQueue() *queue {
+func newQueue(description string) *queue {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	progressbar := progressbar.NewOptions(
+		0,
+		progressbar.OptionSetDescription(description),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWidth(10),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetRenderBlankState(false),
+	)
+
 	return &queue{
-		jobs:   make(chan job),
-		ctx:    ctx,
-		cancel: cancel,
+		jobs:        make(chan job),
+		ctx:         ctx,
+		cancel:      cancel,
+		progressBar: progressbar,
 	}
 }
 
 func (q *queue) addJobs(jobs []job) {
-	var wg sync.WaitGroup
-	wg.Add(len(jobs))
+	total := len(jobs)
+	q.wg.Add(total)
+	max := q.progressBar.GetMax()
+	q.progressBar.ChangeMax(max + total)
 
 	for _, pageJob := range jobs {
 		go func(job job) {
-			q.addJob(job)
-			globalBar.Add(1)
-			wg.Done()
+			q.jobs <- job
+			if q.progressBar != nil {
+				q.progressBar.Add(1)
+			}
+			q.wg.Done()
 		}(pageJob)
 	}
 
 	go func() {
-		wg.Wait()
+		q.wg.Wait()
 		q.cancel()
 	}()
-}
-
-func (q *queue) addJob(job job) {
-	q.jobs <- job
 }
 
 type worker struct {
@@ -213,11 +231,9 @@ func main() {
 
 	pages, _ := fetchNotionDBPages(client, query)
 
-	// Print progress bar
-
 	var jobs []job
 
-	queue := newQueue()
+	queue := newQueue("migrating notion pages")
 
 	for _, page := range pages {
 		// We need to do this, because variables declared in for loops are passed by reference.
@@ -227,18 +243,15 @@ func main() {
 		job := job{
 			run: func() error {
 				path := filePath(newPage, pagePathFilters)
-				return fetchAndSaveToObsidianVault(client, newPage, dbPropertiesSet, dbPropertiesSkipSet, path)
+				return fetchAndSaveToObsidianVault(client, newPage, dbPropertiesSet, dbPropertiesSkipSet, path, true)
 			},
 		}
 
 		jobs = append(jobs, job)
 	}
 
-	globalBar = progressbar.Default(int64(len(jobs)), "migrating notion pages")
-
 	// enequeue page to download and parse
 	queue.addJobs(jobs)
-	// make sure that we take into a ccount the rate limit constraint from notion
 
 	worker := worker{
 		queue: queue,
@@ -300,7 +313,7 @@ func fetchNotionDBPages(client *notion.Client, query *notion.DatabaseQuery) ([]n
 	return result, nil
 }
 
-func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, pagePropertiesToInclude, pagePropertiesToSkip map[string]bool, obsidianPath string) error {
+func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, pagePropertiesToInclude, pagePropertiesToSkip map[string]bool, obsidianPath string, dbPage bool) error {
 	pageBlocks, err := client.FindBlockChildrenByID(context.Background(), page.ID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to extract children blocks for block ID %s. error: %w", page.ID, err)
@@ -320,32 +333,34 @@ func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, pagePr
 	// create new buffer
 	buffer := bufio.NewWriter(f)
 
-	props := page.Properties.(notion.DatabasePageProperties)
+	if dbPage {
+		props := page.Properties.(notion.DatabasePageProperties)
 
-	selectedProps := make(notion.DatabasePageProperties)
+		selectedProps := make(notion.DatabasePageProperties)
 
-	if len(pagePropertiesToInclude) > 0 {
-		for propName, propValue := range props {
-			if pagePropertiesToInclude[strings.ToLower(propName)] {
-				selectedProps[propName] = propValue
+		if len(pagePropertiesToInclude) > 0 {
+			for propName, propValue := range props {
+				if pagePropertiesToInclude[strings.ToLower(propName)] {
+					selectedProps[propName] = propValue
+				}
 			}
 		}
-	}
 
-	if len(pagePropertiesToSkip) > 0 {
-		for propName, propValue := range props {
-			if !pagePropertiesToSkip[strings.ToLower(propName)] {
-				selectedProps[propName] = propValue
+		if len(pagePropertiesToSkip) > 0 {
+			for propName, propValue := range props {
+				if !pagePropertiesToSkip[strings.ToLower(propName)] {
+					selectedProps[propName] = propValue
+				}
 			}
 		}
-	}
 
-	propertiesToFrontMatter(selectedProps, buffer)
+		propertiesToFrontMatter(selectedProps, buffer)
+	}
 
 	err = pageToMarkdown(client, pageBlocks.Results, buffer, false)
 
 	if err != nil {
-		return fmt.Errorf("failed to convert page tp markdown. error: %w", err)
+		return fmt.Errorf("failed to convert page to markdown. error: %w", err)
 	}
 
 	if err = buffer.Flush(); err != nil {
@@ -653,9 +668,14 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 	return nil
 }
 
-// TODO: Handle annotations
+// TODO: Handle annotations better
 func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
-	for _, text := range richText {
+	var style string
+	for i, text := range richText {
+		style = annotationsToStyle(text.Annotations)
+		if style != "" && i == 0 {
+			buffer.WriteString(style)
+		}
 		switch text.Type {
 		case notion.RichTextTypeText:
 			link := text.Text.Link
@@ -678,7 +698,9 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 						return fmt.Errorf("failed to find mention page %s.  error: %w", text.Mention.Page.ID, err)
 					}
 
-					if mentionPage.Parent.Type == notion.ParentTypeDatabase {
+					emptyList := map[string]bool{}
+					switch mentionPage.Parent.Type {
+					case notion.ParentTypeDatabase:
 						dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
 						if err != nil {
 							return fmt.Errorf("failed to find db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
@@ -686,10 +708,17 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 						dbTitle := extractPlainTextFromRichText(dbPage.Title)
 
 						childPath := path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
-						emptyList := map[string]bool{}
-						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath)); err != nil {
+						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
 							return err
 						}
+					case notion.ParentTypePage:
+						props := mentionPage.Properties.(notion.PageProperties)
+						childPath := path.Join(extractPlainTextFromRichText(props.Title.Title), fmt.Sprintf("%s.md", pageTitle))
+						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
+							return err
+						}
+					default:
+						return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
 					}
 
 					pageMention := "[[" + pageTitle + "]]"
@@ -716,17 +745,11 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 		}
 	}
 
-	return nil
-}
-
-func include(elem string, container []string) bool {
-	for _, e := range container {
-		if e == elem {
-			return true
-		}
+	if style != "" {
+		buffer.WriteString(reverseString(style))
 	}
 
-	return false
+	return nil
 }
 
 func annotationsToStyle(annotations *notion.Annotations) string {
