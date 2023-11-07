@@ -278,7 +278,7 @@ func filePath(page notion.Page, pagePathProperties pathAttributes) string {
 			case notion.DBPropTypeDate:
 				date := value.Date.Start
 				if val != "" {
-					str += timefmt.Format(date.Time, "%Y/%B/%d-%A")
+					str += timefmt.Format(date.Time, val)
 				}
 			default:
 				panic("not suported")
@@ -580,6 +580,14 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 				buffer.WriteString(block.Title)
 			}
 			buffer.WriteString("\n")
+		case *notion.ColumnListBlock:
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
+		case *notion.ColumnBlock:
+			if err = writeChrildren(client, object, buffer); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("block not supported: %+v", block)
 		}
@@ -670,26 +678,68 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 
 // TODO: Handle annotations better
 func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
-	var style string
+	var primaryStyle *notion.Annotations
+	var stringPrimaryStyle string
+	var stringSecondaryStyle string
+
 	for i, text := range richText {
-		style = annotationsToStyle(text.Annotations)
-		if style != "" && i == 0 {
-			buffer.WriteString(style)
+		if i > 0 {
+			if hasAnnotation(text.Annotations) {
+				if primaryStyle != nil {
+					stringSecondaryStyle = annotationsToStyle(text.Annotations)
+
+					if stringSecondaryStyle != "" {
+						for _, s := range stringPrimaryStyle {
+							stringSecondaryStyle = strings.ReplaceAll(stringSecondaryStyle, string(s), "")
+						}
+					}
+
+				} else {
+					stringSecondaryStyle = annotationsToStyle(text.Annotations)
+				}
+			}
 		}
+
+		if i == 0 {
+			stringPrimaryStyle = annotationsToStyle(text.Annotations)
+
+			if stringPrimaryStyle != "" {
+				primaryStyle = text.Annotations
+				buffer.WriteString(stringPrimaryStyle)
+			}
+
+		}
+
 		switch text.Type {
 		case notion.RichTextTypeText:
+			if stringSecondaryStyle != "" {
+				buffer.WriteString(stringSecondaryStyle)
+			}
+
 			link := text.Text.Link
 			if link != nil {
 				buffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
 			} else {
 				buffer.WriteString(text.Text.Content)
 			}
+
+			if stringSecondaryStyle != "" {
+				buffer.WriteString(reverseString(stringSecondaryStyle))
+			}
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
 				val, ok := mentionCache.Get(text.Mention.Page.ID)
 				if ok {
+					if stringSecondaryStyle != "" {
+						buffer.WriteString(stringSecondaryStyle)
+					}
+
 					buffer.WriteString(val)
+
+					if stringSecondaryStyle != "" {
+						buffer.WriteString(reverseString(stringSecondaryStyle))
+					}
 				} else {
 					pageTitle := text.PlainText
 
@@ -699,54 +749,138 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 					}
 
 					emptyList := map[string]bool{}
+					var childPath string
 					switch mentionPage.Parent.Type {
 					case notion.ParentTypeDatabase:
 						dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
 						if err != nil {
-							return fmt.Errorf("failed to find db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
+							return fmt.Errorf("failed to find parent db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
 						}
 						dbTitle := extractPlainTextFromRichText(dbPage.Title)
 
-						childPath := path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
+						childPath = path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
+
 						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
-							return err
+							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
+						}
+					case notion.ParentTypeBlock:
+						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.BlockID)
+						if err != nil {
+							return fmt.Errorf("failed to find parent block %s.  error: %w", mentionPage.Parent.BlockID, err)
+						}
+						var title []notion.RichText
+
+						if parentPage.Parent.Type == notion.ParentTypeDatabase {
+							props := parentPage.Properties.(notion.DatabasePageProperties)
+							for _, val := range props {
+								if val.Type == notion.DBPropTypeTitle {
+									title = val.Title
+									break
+								}
+							}
+						} else {
+							props := parentPage.Properties.(notion.PageProperties)
+							title = props.Title.Title
+						}
+
+						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
+						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
+							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
 						}
 					case notion.ParentTypePage:
-						props := mentionPage.Properties.(notion.PageProperties)
-						childPath := path.Join(extractPlainTextFromRichText(props.Title.Title), fmt.Sprintf("%s.md", pageTitle))
+						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.PageID)
+						if err != nil {
+							return fmt.Errorf("failed to find parent mention page %s.  error: %w", mentionPage.Parent.PageID, err)
+						}
+
+						var title []notion.RichText
+
+						if parentPage.Parent.Type == notion.ParentTypeDatabase {
+							props := parentPage.Properties.(notion.DatabasePageProperties)
+							for _, val := range props {
+								if val.Type == notion.DBPropTypeTitle {
+									title = val.Title
+									break
+								}
+							}
+						} else {
+							props := parentPage.Properties.(notion.PageProperties)
+							title = props.Title.Title
+						}
+
+						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
 						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
-							return err
+							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
 						}
 					default:
 						return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
 					}
 
 					pageMention := "[[" + pageTitle + "]]"
+
+					if stringSecondaryStyle != "" {
+						buffer.WriteString(stringSecondaryStyle)
+					}
+
 					buffer.WriteString(pageMention)
+
+					if stringSecondaryStyle != "" {
+						buffer.WriteString(reverseString(stringSecondaryStyle))
+					}
 
 					mentionCache.Set(text.Mention.Page.ID, pageMention)
 				}
 			case notion.MentionTypeDatabase:
-				value := text.PlainText
-				buffer.WriteString("[[")
+				value := "[[" + text.PlainText + "]]"
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(stringSecondaryStyle)
+				}
+
 				buffer.WriteString(value)
-				buffer.WriteString("]]")
+
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(reverseString(stringSecondaryStyle))
+				}
 			case notion.MentionTypeDate:
-				buffer.WriteString("[[")
-				buffer.WriteString(text.Mention.Date.Start.Format("2006-01-02"))
-				buffer.WriteString("]]")
+				value := "[[" + text.Mention.Date.Start.Format("2006-01-02") + "]]"
+
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(stringSecondaryStyle)
+				}
+
+				buffer.WriteString(value)
+
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(reverseString(stringSecondaryStyle))
+				}
 			case notion.MentionTypeLinkPreview:
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(stringSecondaryStyle)
+				}
+
 				buffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
+
+				if stringSecondaryStyle != "" {
+					buffer.WriteString(reverseString(stringSecondaryStyle))
+				}
 			case notion.MentionTypeTemplateMention:
 			case notion.MentionTypeUser:
 			}
 		case notion.RichTextTypeEquation:
-			buffer.WriteString(fmt.Sprintf("$%s$", text.Equation.Expression))
+			if stringSecondaryStyle != "" {
+				buffer.WriteString(stringSecondaryStyle)
+			}
+
+			buffer.WriteString(fmt.Sprintf("$$%s$$", text.Equation.Expression))
+
+			if stringSecondaryStyle != "" {
+				buffer.WriteString(reverseString(stringSecondaryStyle))
+			}
 		}
 	}
 
-	if style != "" {
-		buffer.WriteString(reverseString(style))
+	if stringPrimaryStyle != "" {
+		buffer.WriteString(reverseString(stringPrimaryStyle))
 	}
 
 	return nil
@@ -775,6 +909,30 @@ func annotationsToStyle(annotations *notion.Annotations) string {
 	}
 
 	return style
+}
+
+func hasAnnotation(annotations *notion.Annotations) bool {
+	if annotations.Bold {
+		return true
+	}
+
+	if annotations.Strikethrough {
+		return true
+	}
+
+	if annotations.Italic {
+		return true
+	}
+
+	if annotations.Code {
+		return true
+	}
+
+	if annotations.Color != notion.ColorDefault {
+		return true
+	}
+
+	return false
 }
 
 func reverseString(s string) string {
