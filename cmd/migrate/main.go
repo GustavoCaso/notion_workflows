@@ -211,25 +211,7 @@ func main() {
 
 	client := notion.NewClient(*token)
 
-	filterTime, _ := time.Parse(time.RFC3339, "2020-01-01")
-	query := &notion.DatabaseQuery{
-		Filter: &notion.DatabaseQueryFilter{
-			Property: "Date",
-			DatabaseQueryPropertyFilter: notion.DatabaseQueryPropertyFilter{
-				Date: &notion.DatePropertyFilter{
-					After: &filterTime,
-				},
-			},
-		},
-		Sorts: []notion.DatabaseQuerySort{
-			{
-				Property:  "Date",
-				Direction: notion.SortDirAsc,
-			},
-		},
-	}
-
-	pages, _ := fetchNotionDBPages(client, query)
+	pages, _ := fetchNotionDBPages(client, *databaseID)
 
 	var jobs []job
 
@@ -289,8 +271,8 @@ func filePath(page notion.Page, pagePathProperties pathAttributes) string {
 	return path.Join(*obsidianVault, fileName)
 }
 
-func fetchNotionDBPages(client *notion.Client, query *notion.DatabaseQuery) ([]notion.Page, error) {
-	notionResponse, err := client.QueryDatabase(context.Background(), *databaseID, query)
+func fetchNotionDBPages(client *notion.Client, id string) ([]notion.Page, error) {
+	notionResponse, err := client.QueryDatabase(context.Background(), id, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -299,10 +281,11 @@ func fetchNotionDBPages(client *notion.Client, query *notion.DatabaseQuery) ([]n
 
 	result = append(result, notionResponse.Results...)
 
+	query := &notion.DatabaseQuery{}
 	for notionResponse.HasMore {
 		query.StartCursor = *notionResponse.NextCursor
 
-		notionResponse, err = client.QueryDatabase(context.Background(), *databaseID, query)
+		notionResponse, err = client.QueryDatabase(context.Background(), id, query)
 		if err != nil {
 			panic(err)
 		}
