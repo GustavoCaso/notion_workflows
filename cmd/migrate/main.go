@@ -522,8 +522,14 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			buffer.WriteString("---")
 			buffer.WriteString("\n")
 		case *notion.ChildPageBlock:
+			if indent {
+				buffer.WriteString(fmt.Sprintf(" [[%s]]", block.Title))
+			} else {
+				buffer.WriteString(fmt.Sprintf("[[%s]]", block.Title))
+			}
+			buffer.WriteString("\n")
 		case *notion.LinkToPageBlock:
-			err := findOnCacheOrFetchPage(client, block.PageID, buffer)
+			err := findOrFetchPage(client, block.PageID, buffer)
 			if err != nil {
 				return err
 			}
@@ -707,7 +713,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
-				return findOnCacheOrFetchPage(client, text.Mention.Page.ID, buffer)
+				return findOrFetchPage(client, text.Mention.Page.ID, buffer)
 			case notion.MentionTypeDatabase:
 				value := "[[" + text.PlainText + "]]"
 				buffer.WriteString(value)
@@ -731,7 +737,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 	return nil
 }
 
-func findOnCacheOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer) error {
+func findOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer) error {
 	val, ok := mentionCache.Get(pageID)
 	if ok {
 		buffer.WriteString(val)
@@ -825,11 +831,13 @@ func findOnCacheOrFetchPage(client *notion.Client, pageID string, buffer *bufio.
 			return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
 		}
 
-		pageMention := "[[" + childTitle + "]]"
+		if childTitle != "" {
+			pageMention := "[[" + childTitle + "]]"
 
-		buffer.WriteString(pageMention)
+			buffer.WriteString(pageMention)
 
-		mentionCache.Set(pageID, pageMention)
+			mentionCache.Set(pageID, pageMention)
+		}
 	}
 
 	return nil
@@ -891,27 +899,7 @@ func annotationsToStyle(annotations *notion.Annotations) string {
 }
 
 func hasAnnotation(annotations *notion.Annotations) bool {
-	if annotations.Bold {
-		return true
-	}
-
-	if annotations.Strikethrough {
-		return true
-	}
-
-	if annotations.Italic {
-		return true
-	}
-
-	if annotations.Code {
-		return true
-	}
-
-	if annotations.Color != notion.ColorDefault {
-		return true
-	}
-
-	return false
+	return annotations.Bold || annotations.Strikethrough || annotations.Italic || annotations.Code || annotations.Color != notion.ColorDefault
 }
 
 func reverseString(s string) string {
