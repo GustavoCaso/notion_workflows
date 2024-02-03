@@ -256,6 +256,7 @@ func empty(v *string) bool {
 func filePath(page notion.Page, pagePathProperties pathAttributes) string {
 	properties := page.Properties.(notion.DatabasePageProperties)
 	var str string
+
 	for key, value := range properties {
 		val, ok := pagePathProperties[strings.ToLower(key)]
 		if ok {
@@ -755,7 +756,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 						childPath = path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
 
 						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
-							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
+							fmt.Printf("failed to fetch mention page content with DB parent: %s\n", pageTitle)
 						}
 					case notion.ParentTypeBlock:
 						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.BlockID)
@@ -779,7 +780,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
 						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
-							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
+							fmt.Printf("failed to fetch mention page content with block parent: %s\n", pageTitle)
 						}
 					case notion.ParentTypePage:
 						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.PageID)
@@ -804,7 +805,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
 						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
-							fmt.Printf("failed to fetch mention page content: %s\n", pageTitle)
+							fmt.Printf("failed to fetch mention page content with page parent: %s\n", pageTitle)
 						}
 					default:
 						return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
