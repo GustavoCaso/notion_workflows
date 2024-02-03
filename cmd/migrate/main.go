@@ -265,11 +265,14 @@ func filePath(page notion.Page, pagePathProperties pathAttributes) string {
 				if val != "" {
 					str += timefmt.Format(date.Time, val)
 				}
+			case notion.DBPropTypeTitle:
+				str += extractPlainTextFromRichText(value.Title)
 			default:
 				panic("not suported")
 			}
 		}
 	}
+
 	fileName := fmt.Sprintf("%s.md", str)
 	return path.Join(*obsidianVault, fileName)
 }
