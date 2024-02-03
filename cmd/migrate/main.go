@@ -46,7 +46,8 @@ func newCache() *cache {
 var mentionCache = newCache()
 
 type job struct {
-	run func() error
+	path string
+	run  func() error
 }
 
 type errJob struct {
@@ -222,9 +223,11 @@ func main() {
 		// Otherwise, our closure will always receive the last item from the page.
 		newPage := page
 
+		path := filePath(newPage, pagePathFilters)
+
 		job := job{
+			path: path,
 			run: func() error {
-				path := filePath(newPage, pagePathFilters)
 				return fetchAndSaveToObsidianVault(client, newPage, dbPropertiesSet, dbPropertiesSkipSet, path, true)
 			},
 		}
@@ -242,7 +245,7 @@ func main() {
 	worker.doWork()
 
 	for _, errJob := range worker.errorJobs {
-		fmt.Printf("an error ocurred when processing a page %v\n", errors.Unwrap(errJob.err))
+		fmt.Printf("an error ocurred when processing a page %s. error: %v\n", errJob.job.path, errors.Unwrap(errJob.err))
 	}
 }
 
