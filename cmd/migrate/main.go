@@ -342,8 +342,9 @@ func fetchAndSaveToObsidianVault(client *notion.Client, page notion.Page, pagePr
 				}
 			}
 		}
-
-		propertiesToFrontMatter(selectedProps, buffer)
+		if len(selectedProps) > 0 {
+			propertiesToFrontMatter(selectedProps, buffer)
+		}
 	}
 
 	err = pageToMarkdown(client, pageBlocks.Results, buffer, false)
