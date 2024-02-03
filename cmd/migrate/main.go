@@ -588,6 +588,14 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			if err = writeTable(client, block.TableWidth, object, buffer); err != nil {
 				return err
 			}
+		case *notion.EquationBlock:
+			if indent {
+				buffer.WriteString(fmt.Sprintf(" $$%s$$", block.Expression))
+			} else {
+				buffer.WriteString(fmt.Sprintf("$$%s$$", block.Expression))
+			}
+			buffer.WriteString("\n")
+		case *notion.UnsupportedBlock:
 		default:
 			return fmt.Errorf("block not supported: %+v", block)
 		}
