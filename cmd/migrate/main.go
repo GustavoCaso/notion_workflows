@@ -887,13 +887,9 @@ func writeTable(client *notion.Client, tableWidth int, block notion.Block, buffe
 		if err != nil {
 			return fmt.Errorf("failed to extract table children blocks for block ID %s. error: %w", block.ID(), err)
 		}
-		fmt.Printf("Table with %d\n", tableWidth)
-		fmt.Printf("Total of blocks %d\n", len(pageBlocks.Results))
 
 		for rowIndex, object := range pageBlocks.Results {
 			row := object.(*notion.TableRowBlock)
-			fmt.Printf("Total of cells %d\n", len(row.Cells))
-			fmt.Println()
 			for i, cell := range row.Cells {
 				if err = writeRichText(client, buffer, cell); err != nil {
 					return err
