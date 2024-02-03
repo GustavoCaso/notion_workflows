@@ -578,6 +578,10 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			if err = writeChrildren(client, object, buffer); err != nil {
 				return err
 			}
+		case *notion.TableBlock:
+			if err = writeTable(client, block.TableWidth, object, buffer); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("block not supported: %+v", block)
 		}
@@ -871,6 +875,40 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 	if stringPrimaryStyle != "" {
 		buffer.WriteString(reverseString(stringPrimaryStyle))
+	}
+
+	return nil
+}
+
+func writeTable(client *notion.Client, tableWidth int, block notion.Block, buffer *bufio.Writer) error {
+	if block.HasChildren() {
+		pageBlocks, err := client.FindBlockChildrenByID(context.Background(), block.ID(), nil)
+		if err != nil {
+			return fmt.Errorf("failed to extract table children blocks for block ID %s. error: %w", block.ID(), err)
+		}
+		fmt.Printf("Table with %d\n", tableWidth)
+		fmt.Printf("Total of blocks %d\n", len(pageBlocks.Results))
+
+		for rowIndex, object := range pageBlocks.Results {
+			row := object.(*notion.TableRowBlock)
+			fmt.Printf("Total of cells %d\n", len(row.Cells))
+			fmt.Println()
+			for i, cell := range row.Cells {
+				if err = writeRichText(client, buffer, cell); err != nil {
+					return err
+				}
+				buffer.WriteString("|")
+				if i+1 == tableWidth {
+					buffer.WriteString("\n")
+					if rowIndex == 0 {
+						for y := 1; y <= tableWidth; y++ {
+							buffer.WriteString("--|")
+						}
+						buffer.WriteString("\n")
+					}
+				}
+			}
+		}
 	}
 
 	return nil
