@@ -522,6 +522,11 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			buffer.WriteString("---")
 			buffer.WriteString("\n")
 		case *notion.ChildPageBlock:
+		case *notion.LinkToPageBlock:
+			err := findOnCacheOrFetchPage(client, block.PageID, buffer)
+			if err != nil {
+				return err
+			}
 		case *notion.CodeBlock:
 			buffer.WriteString("```")
 			buffer.WriteString(*block.Language)
@@ -694,91 +699,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
-				val, ok := mentionCache.Get(text.Mention.Page.ID)
-				if ok {
-					buffer.WriteString(val)
-				} else {
-					pageTitle := text.PlainText
-
-					mentionPage, err := client.FindPageByID(context.Background(), text.Mention.Page.ID)
-					if err != nil {
-						return fmt.Errorf("failed to find mention page %s.  error: %w", text.Mention.Page.ID, err)
-					}
-
-					emptyList := map[string]bool{}
-					var childPath string
-					switch mentionPage.Parent.Type {
-					case notion.ParentTypeDatabase:
-						dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
-						if err != nil {
-							return fmt.Errorf("failed to find parent db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
-						}
-						dbTitle := extractPlainTextFromRichText(dbPage.Title)
-
-						childPath = path.Join(dbTitle, fmt.Sprintf("%s.md", pageTitle))
-
-						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
-							fmt.Printf("failed to fetch mention page content with DB parent: %s\n", pageTitle)
-						}
-					case notion.ParentTypeBlock:
-						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.BlockID)
-						if err != nil {
-							return fmt.Errorf("failed to find parent block %s.  error: %w", mentionPage.Parent.BlockID, err)
-						}
-						var title []notion.RichText
-
-						if parentPage.Parent.Type == notion.ParentTypeDatabase {
-							props := parentPage.Properties.(notion.DatabasePageProperties)
-							for _, val := range props {
-								if val.Type == notion.DBPropTypeTitle {
-									title = val.Title
-									break
-								}
-							}
-						} else {
-							props := parentPage.Properties.(notion.PageProperties)
-							title = props.Title.Title
-						}
-
-						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
-						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
-							fmt.Printf("failed to fetch mention page content with block parent: %s\n", pageTitle)
-						}
-					case notion.ParentTypePage:
-						parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.PageID)
-						if err != nil {
-							return fmt.Errorf("failed to find parent mention page %s.  error: %w", mentionPage.Parent.PageID, err)
-						}
-
-						var title []notion.RichText
-
-						if parentPage.Parent.Type == notion.ParentTypeDatabase {
-							props := parentPage.Properties.(notion.DatabasePageProperties)
-							for _, val := range props {
-								if val.Type == notion.DBPropTypeTitle {
-									title = val.Title
-									break
-								}
-							}
-						} else {
-							props := parentPage.Properties.(notion.PageProperties)
-							title = props.Title.Title
-						}
-
-						childPath = path.Join(extractPlainTextFromRichText(title), fmt.Sprintf("%s.md", pageTitle))
-						if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), false); err != nil {
-							fmt.Printf("failed to fetch mention page content with page parent: %s\n", pageTitle)
-						}
-					default:
-						return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
-					}
-
-					pageMention := "[[" + pageTitle + "]]"
-
-					buffer.WriteString(pageMention)
-
-					mentionCache.Set(text.Mention.Page.ID, pageMention)
-				}
+				return findOnCacheOrFetchPage(client, text.Mention.Page.ID, buffer)
 			case notion.MentionTypeDatabase:
 				value := "[[" + text.PlainText + "]]"
 				buffer.WriteString(value)
@@ -797,6 +718,110 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 		if annotations != "" {
 			buffer.WriteString(reverseString(annotations))
 		}
+	}
+
+	return nil
+}
+
+func findOnCacheOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer) error {
+	val, ok := mentionCache.Get(pageID)
+	if ok {
+		buffer.WriteString(val)
+	} else {
+		mentionPage, err := client.FindPageByID(context.Background(), pageID)
+		if err != nil {
+			fmt.Printf("failed to find mention page %s\n", pageID)
+			fmt.Println("make sure the pageID exists in your Notion workspace")
+			fmt.Println("sometime there are deleted pages that appear as Untitled")
+			return nil
+		}
+
+		emptyList := map[string]bool{}
+		var childPath string
+		var childTitle string
+		switch mentionPage.Parent.Type {
+		case notion.ParentTypeDatabase:
+			props := mentionPage.Properties.(notion.DatabasePageProperties)
+
+			childTitle = extractPlainTextFromRichText(props["name"].Title)
+
+			// Since we are migrating from the same DB we do need to create a subfolder
+			// within the Obsidian vault
+			if *databaseID != mentionPage.Parent.DatabaseID {
+				dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
+				if err != nil {
+					return fmt.Errorf("failed to find parent db %s.  error: %w", mentionPage.Parent.DatabaseID, err)
+				}
+
+				dbTitle := extractPlainTextFromRichText(dbPage.Title)
+
+				childPath = path.Join(dbTitle, fmt.Sprintf("%s.md", childTitle))
+			} else {
+				childPath = fmt.Sprintf("%s.md", childTitle)
+			}
+
+			if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
+				fmt.Printf("failed to fetch mention page content with DB parent: %s\n", childTitle)
+			}
+		case notion.ParentTypeBlock:
+			parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.BlockID)
+			if err != nil {
+				return fmt.Errorf("failed to find parent block %s.  error: %w", mentionPage.Parent.BlockID, err)
+			}
+			var title []notion.RichText
+
+			if parentPage.Parent.Type == notion.ParentTypeDatabase {
+				props := parentPage.Properties.(notion.DatabasePageProperties)
+				for _, val := range props {
+					if val.Type == notion.DBPropTypeTitle {
+						title = val.Title
+						break
+					}
+				}
+			} else {
+				props := parentPage.Properties.(notion.PageProperties)
+				title = props.Title.Title
+			}
+
+			childTitle = extractPlainTextFromRichText(title)
+
+			if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childTitle), false); err != nil {
+				fmt.Printf("failed to fetch mention page content with block parent: %s\n", childTitle)
+			}
+		case notion.ParentTypePage:
+			parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.PageID)
+			if err != nil {
+				return fmt.Errorf("failed to find parent mention page %s.  error: %w", mentionPage.Parent.PageID, err)
+			}
+
+			var title []notion.RichText
+
+			if parentPage.Parent.Type == notion.ParentTypeDatabase {
+				props := parentPage.Properties.(notion.DatabasePageProperties)
+				for _, val := range props {
+					if val.Type == notion.DBPropTypeTitle {
+						title = val.Title
+						break
+					}
+				}
+			} else {
+				props := parentPage.Properties.(notion.PageProperties)
+				title = props.Title.Title
+			}
+
+			childTitle = extractPlainTextFromRichText(title)
+			if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childTitle), false); err != nil {
+				fmt.Printf("failed to fetch mention page content with page parent: %s\n", childTitle)
+			}
+		default:
+			return fmt.Errorf("unsupported mention page type %s", mentionPage.Parent.Type)
+		}
+
+		pageMention := "[[" + childTitle + "]]"
+
+		buffer.WriteString(pageMention)
+
+		mentionCache.Set(pageID, pageMention)
 	}
 
 	return nil
