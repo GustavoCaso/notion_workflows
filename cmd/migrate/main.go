@@ -673,68 +673,30 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 
 // TODO: Handle annotations better
 func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
-	var primaryStyle *notion.Annotations
-	var stringPrimaryStyle string
-	var stringSecondaryStyle string
-
-	for i, text := range richText {
-		if i > 0 {
-			if hasAnnotation(text.Annotations) {
-				if primaryStyle != nil {
-					stringSecondaryStyle = annotationsToStyle(text.Annotations)
-
-					if stringSecondaryStyle != "" {
-						for _, s := range stringPrimaryStyle {
-							stringSecondaryStyle = strings.ReplaceAll(stringSecondaryStyle, string(s), "")
-						}
-					}
-
-				} else {
-					stringSecondaryStyle = annotationsToStyle(text.Annotations)
-				}
-			}
+	for _, text := range richText {
+		var annotations string
+		if hasAnnotation(text.Annotations) {
+			annotations = annotationsToStyle(text.Annotations)
 		}
 
-		if i == 0 {
-			stringPrimaryStyle = annotationsToStyle(text.Annotations)
-
-			if stringPrimaryStyle != "" {
-				primaryStyle = text.Annotations
-				buffer.WriteString(stringPrimaryStyle)
-			}
-
+		if annotations != "" {
+			buffer.WriteString(annotations)
 		}
 
 		switch text.Type {
 		case notion.RichTextTypeText:
-			if stringSecondaryStyle != "" {
-				buffer.WriteString(stringSecondaryStyle)
-			}
-
 			link := text.Text.Link
 			if link != nil {
 				buffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
 			} else {
 				buffer.WriteString(text.Text.Content)
 			}
-
-			if stringSecondaryStyle != "" {
-				buffer.WriteString(reverseString(stringSecondaryStyle))
-			}
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
 				val, ok := mentionCache.Get(text.Mention.Page.ID)
 				if ok {
-					if stringSecondaryStyle != "" {
-						buffer.WriteString(stringSecondaryStyle)
-					}
-
 					buffer.WriteString(val)
-
-					if stringSecondaryStyle != "" {
-						buffer.WriteString(reverseString(stringSecondaryStyle))
-					}
 				} else {
 					pageTitle := text.PlainText
 
@@ -813,69 +775,28 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notio
 
 					pageMention := "[[" + pageTitle + "]]"
 
-					if stringSecondaryStyle != "" {
-						buffer.WriteString(stringSecondaryStyle)
-					}
-
 					buffer.WriteString(pageMention)
-
-					if stringSecondaryStyle != "" {
-						buffer.WriteString(reverseString(stringSecondaryStyle))
-					}
 
 					mentionCache.Set(text.Mention.Page.ID, pageMention)
 				}
 			case notion.MentionTypeDatabase:
 				value := "[[" + text.PlainText + "]]"
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(stringSecondaryStyle)
-				}
-
 				buffer.WriteString(value)
-
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(reverseString(stringSecondaryStyle))
-				}
 			case notion.MentionTypeDate:
 				value := "[[" + text.Mention.Date.Start.Format("2006-01-02") + "]]"
-
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(stringSecondaryStyle)
-				}
-
 				buffer.WriteString(value)
-
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(reverseString(stringSecondaryStyle))
-				}
 			case notion.MentionTypeLinkPreview:
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(stringSecondaryStyle)
-				}
-
 				buffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
-
-				if stringSecondaryStyle != "" {
-					buffer.WriteString(reverseString(stringSecondaryStyle))
-				}
 			case notion.MentionTypeTemplateMention:
 			case notion.MentionTypeUser:
 			}
 		case notion.RichTextTypeEquation:
-			if stringSecondaryStyle != "" {
-				buffer.WriteString(stringSecondaryStyle)
-			}
-
 			buffer.WriteString(fmt.Sprintf("$$%s$$", text.Equation.Expression))
-
-			if stringSecondaryStyle != "" {
-				buffer.WriteString(reverseString(stringSecondaryStyle))
-			}
 		}
-	}
 
-	if stringPrimaryStyle != "" {
-		buffer.WriteString(reverseString(stringPrimaryStyle))
+		if annotations != "" {
+			buffer.WriteString(reverseString(annotations))
+		}
 	}
 
 	return nil
