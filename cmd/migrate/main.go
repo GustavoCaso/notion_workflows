@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -690,49 +691,99 @@ func writeChrildren(client *notion.Client, block notion.Block, buffer *bufio.Wri
 	return nil
 }
 
+type richText struct {
+	hasAnnotations    bool
+	notionAnnotations *notion.Annotations
+	stringAnnotation  string
+	text              string
+}
+
 // TODO: Handle annotations better
-func writeRichText(client *notion.Client, buffer *bufio.Writer, richText []notion.RichText) error {
-	for _, text := range richText {
-		var annotations string
+func writeRichText(client *notion.Client, buffer *bufio.Writer, richTextBlock []notion.RichText) error {
+	richTexts := []richText{}
+
+	for _, text := range richTextBlock {
+		var annotation string
+		r := richText{}
+		b := &bytes.Buffer{}
+		richTextBuffer := bufio.NewWriter(b)
+		r.notionAnnotations = text.Annotations
+
 		if hasAnnotation(text.Annotations) {
-			annotations = annotationsToStyle(text.Annotations)
+			r.hasAnnotations = true
+			annotation = annotationsToStyle(text.Annotations)
+			r.stringAnnotation = annotation
 		}
 
-		if annotations != "" {
-			buffer.WriteString(annotations)
-		}
+		richTextBuffer.WriteString(annotation)
 
 		switch text.Type {
 		case notion.RichTextTypeText:
 			link := text.Text.Link
-			if link != nil {
-				buffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
+			if link != nil && !strings.Contains(annotation, "`") {
+				richTextBuffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
 			} else {
-				buffer.WriteString(text.Text.Content)
+				richTextBuffer.WriteString(text.Text.Content)
 			}
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
-				return findOrFetchPage(client, text.Mention.Page.ID, buffer)
+				return findOrFetchPage(client, text.Mention.Page.ID, richTextBuffer)
 			case notion.MentionTypeDatabase:
 				value := "[[" + text.PlainText + "]]"
-				buffer.WriteString(value)
+				richTextBuffer.WriteString(value)
 			case notion.MentionTypeDate:
 				value := "[[" + text.Mention.Date.Start.Format("2006-01-02") + "]]"
-				buffer.WriteString(value)
+				richTextBuffer.WriteString(value)
 			case notion.MentionTypeLinkPreview:
-				buffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
+				richTextBuffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
 			case notion.MentionTypeTemplateMention:
 			case notion.MentionTypeUser:
 			}
 		case notion.RichTextTypeEquation:
-			buffer.WriteString(fmt.Sprintf("$$%s$$", text.Equation.Expression))
+			richTextBuffer.WriteString(fmt.Sprintf("$$%s$$", text.Equation.Expression))
 		}
 
-		if annotations != "" {
-			buffer.WriteString(reverseString(annotations))
+		richTextBuffer.WriteString(reverseString(annotation))
+
+		err := richTextBuffer.Flush()
+		if err != nil {
+			return err
+		}
+		r.text = b.String()
+		richTexts = append(richTexts, r)
+	}
+
+	var result string
+	for i, richText := range richTexts {
+		if i > 0 {
+			if richText.hasAnnotations && richTexts[i-1].hasAnnotations {
+				// There is a corner case for nested annotation of bold and italic
+				// https://help.obsidian.md/Editing+and+formatting/Basic+formatting+syntax#Bold%2C+italics%2C+highlights
+				// We only account for the easy case for now
+				if (richTexts[i-1].notionAnnotations.Bold && !richTexts[i-1].notionAnnotations.Italic) && (richText.notionAnnotations.Bold && richText.notionAnnotations.Italic) {
+					result = strings.TrimRight(result, "*")
+					text := richText.text
+					text = strings.TrimLeft(text, "*")
+					text = strings.TrimRight(text, "*")
+					text = "_" + text + "_**"
+					result += text
+				} else {
+					leftAnnotations := richTexts[i-1].stringAnnotation
+					rightAnnotations := richText.stringAnnotation
+					result = strings.TrimRight(result, reverseString(rightAnnotations))
+					test := strings.TrimLeft(richText.text, leftAnnotations)
+					result += test
+				}
+			} else {
+				result += richText.text
+			}
+		} else {
+			result += richText.text
 		}
 	}
+
+	buffer.WriteString(result)
 
 	return nil
 }
@@ -874,25 +925,29 @@ func writeTable(client *notion.Client, tableWidth int, block notion.Block, buffe
 }
 
 func annotationsToStyle(annotations *notion.Annotations) string {
-	style := ""
+	var style string
 	if annotations.Bold {
-		style += "**"
+		if annotations.Italic {
+			style += "***"
+		} else {
+			style += "**"
+		}
+	} else {
+		if annotations.Italic {
+			style += "_"
+		}
 	}
 
 	if annotations.Strikethrough {
 		style += "~~"
 	}
 
-	if annotations.Italic {
-		style += "_"
+	if annotations.Color != notion.ColorDefault {
+		style += "=="
 	}
 
 	if annotations.Code {
 		style += "`"
-	}
-
-	if annotations.Color != notion.ColorDefault {
-		style += "=="
 	}
 
 	return style
