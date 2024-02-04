@@ -21,6 +21,7 @@ import (
 
 type cache struct {
 	storage map[string]string
+	working map[string]bool
 	mu      sync.RWMutex
 }
 
@@ -35,12 +36,27 @@ func (c *cache) Set(key, value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.storage[key] = value
+	c.working[key] = false
+}
+
+func (c *cache) Mark(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.working[key] = true
+}
+
+func (c *cache) IsWorking(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.working[key]
 }
 
 func newCache() *cache {
 	storage := map[string]string{}
+	working := map[string]bool{}
 	return &cache{
 		storage: storage,
+		working: working,
 	}
 }
 
@@ -534,6 +550,7 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 			if err != nil {
 				return err
 			}
+			buffer.WriteString("\n")
 		case *notion.CodeBlock:
 			buffer.WriteString("```")
 			buffer.WriteString(*block.Language)
@@ -550,6 +567,13 @@ func pageToMarkdown(client *notion.Client, blocks []notion.Block, buffer *bufio.
 					buffer.WriteString(fmt.Sprintf("	![](%s)", block.External.URL))
 				} else {
 					buffer.WriteString(fmt.Sprintf("![](%s)", block.External.URL))
+				}
+			}
+			if block.Type == notion.FileTypeFile {
+				if indent {
+					buffer.WriteString(fmt.Sprintf("	![](%s)", block.File.URL))
+				} else {
+					buffer.WriteString(fmt.Sprintf("![](%s)", block.File.URL))
 				}
 			}
 			buffer.WriteString("\n")
@@ -721,14 +745,25 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richTextBlock []
 		case notion.RichTextTypeText:
 			link := text.Text.Link
 			if link != nil && !strings.Contains(annotation, "`") {
-				richTextBuffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
+				if strings.HasPrefix(link.URL, "/") {
+					// Link to internal Notion page
+					err := findOrFetchPage(client, strings.TrimPrefix(link.URL, "/"), richTextBuffer)
+					if err != nil {
+						return err
+					}
+				} else {
+					richTextBuffer.WriteString(fmt.Sprintf("[%s](%s)", text.Text.Content, link.URL))
+				}
 			} else {
 				richTextBuffer.WriteString(text.Text.Content)
 			}
 		case notion.RichTextTypeMention:
 			switch text.Mention.Type {
 			case notion.MentionTypePage:
-				return findOrFetchPage(client, text.Mention.Page.ID, richTextBuffer)
+				err := findOrFetchPage(client, text.Mention.Page.ID, richTextBuffer)
+				if err != nil {
+					return err
+				}
 			case notion.MentionTypeDatabase:
 				value := "[[" + text.PlainText + "]]"
 				richTextBuffer.WriteString(value)
@@ -736,7 +771,7 @@ func writeRichText(client *notion.Client, buffer *bufio.Writer, richTextBlock []
 				value := "[[" + text.Mention.Date.Start.Format("2006-01-02") + "]]"
 				richTextBuffer.WriteString(value)
 			case notion.MentionTypeLinkPreview:
-				richTextBuffer.WriteString(fmt.Sprintf("![](%s)", text.Mention.LinkPreview.URL))
+				richTextBuffer.WriteString(text.Mention.LinkPreview.URL)
 			case notion.MentionTypeTemplateMention:
 			case notion.MentionTypeUser:
 			}
@@ -793,25 +828,34 @@ func findOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer)
 	if ok {
 		buffer.WriteString(val)
 	} else {
+		// There could be pages that self reference them
+		// We need a way to mark that a page is being work on
+		// to avid endless loop
+		if mentionCache.IsWorking(pageID) {
+			return nil
+		}
+		mentionCache.Mark(pageID)
+		var pageMention string
+		defer mentionCache.Set(pageID, pageMention)
+
 		mentionPage, err := client.FindPageByID(context.Background(), pageID)
 		if err != nil {
-			fmt.Printf("failed to find mention page %s\n", pageID)
-			fmt.Println("make sure the pageID exists in your Notion workspace")
-			fmt.Println("sometime there are deleted pages that appear as Untitled")
+			// TODO: figure out why we hit this error
+			fmt.Printf("failed to find page %s. error %s\n", pageID, err.Error())
 			return nil
 		}
 
 		emptyList := map[string]bool{}
-		var childPath string
 		var childTitle string
 		switch mentionPage.Parent.Type {
 		case notion.ParentTypeDatabase:
 			props := mentionPage.Properties.(notion.DatabasePageProperties)
+			childTitle = extractPlainTextFromRichText(props["Name"].Title)
 
-			childTitle = extractPlainTextFromRichText(props["name"].Title)
-
+			var childPath string
 			// Since we are migrating from the same DB we do need to create a subfolder
-			// within the Obsidian vault
+			// within the Obsidian vault. So we can skip fetching the database to gather
+			// the name to create the subfolder
 			if *databaseID != mentionPage.Parent.DatabaseID {
 				dbPage, err := client.FindDatabaseByID(context.Background(), mentionPage.Parent.DatabaseID)
 				if err != nil {
@@ -826,7 +870,7 @@ func findOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer)
 			}
 
 			if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childPath), true); err != nil {
-				fmt.Printf("failed to fetch mention page content with DB parent: %s\n", childTitle)
+				return fmt.Errorf("failed to fetch and save mention page %s content with DB %s. error: %w", childTitle, mentionPage.Parent.DatabaseID, err)
 			}
 		case notion.ParentTypeBlock:
 			parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.BlockID)
@@ -851,7 +895,7 @@ func findOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer)
 			childTitle = extractPlainTextFromRichText(title)
 
 			if err = fetchAndSaveToObsidianVault(client, mentionPage, emptyList, emptyList, path.Join(*obsidianVault, childTitle), false); err != nil {
-				fmt.Printf("failed to fetch mention page content with block parent: %s\n", childTitle)
+				return fmt.Errorf("failed to fetch and save mention page %s content with block parent %s. error: %w", childTitle, mentionPage.Parent.BlockID, err)
 			}
 		case notion.ParentTypePage:
 			parentPage, err := client.FindPageByID(context.Background(), mentionPage.Parent.PageID)
@@ -883,11 +927,9 @@ func findOrFetchPage(client *notion.Client, pageID string, buffer *bufio.Writer)
 		}
 
 		if childTitle != "" {
-			pageMention := "[[" + childTitle + "]]"
+			pageMention = "[[" + childTitle + "]]"
 
 			buffer.WriteString(pageMention)
-
-			mentionCache.Set(pageID, pageMention)
 		}
 	}
 
